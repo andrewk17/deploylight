@@ -183,4 +183,6 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
+Made by [Andrew Kim](https://andrewkim.me).
+
 Deploylight is not affiliated with or endorsed by Vercel Inc. or Cloudflare, Inc. Vercel and Cloudflare are trademarks of their respective owners.
