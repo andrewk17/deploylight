@@ -295,7 +295,9 @@ final class PreferencesViewModel: ObservableObject {
         } catch {
             // Keep the edit visible so it can be retried; never include credentials in errors.
         }
-        storageError = store.storageError
+        if storageError != store.storageError {
+            storageError = store.storageError
+        }
     }
 
     /// An empty value means "all".

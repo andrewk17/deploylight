@@ -218,6 +218,7 @@ final class PreferencesStore {
 
     private let userDefaults: UserDefaults
     private let tokens: KeychainTokenStore
+    private let canPersistPreferences: Bool
     // Retain a legacy token in its original storage until its Keychain read is confirmed.
     private var pendingLegacyTokens: [String: String] = [:]
     private(set) var storageError: String?
@@ -227,7 +228,9 @@ final class PreferencesStore {
         self.userDefaults = userDefaults
         self.tokens = tokens
         let data = userDefaults.data(forKey: Self.storageKey)
-        current = data.flatMap { try? JSONDecoder().decode(Preferences.self, from: $0) } ?? .default
+        let decoded = data.flatMap { try? JSONDecoder().decode(Preferences.self, from: $0) }
+        canPersistPreferences = data == nil || decoded != nil
+        current = decoded ?? .default
         for provider in TokenProvider.allCases {
             let legacy = current[keyPath: provider.preference]
             if !legacy.isEmpty { pendingLegacyTokens[provider.legacyKey] = legacy }
@@ -246,12 +249,15 @@ final class PreferencesStore {
             }
         }
         // Don't replace unrecognized/corrupt preferences during startup.
-        if data.map({ (try? JSONDecoder().decode(Preferences.self, from: $0)) != nil }) ?? true {
+        if canPersistPreferences {
             persist()
+        } else {
+            storageError = "Couldn't read saved preferences. The original data has been kept; changes cannot be saved yet."
         }
     }
 
     func update(_ transform: (inout Preferences) -> Void) throws {
+        guard canPersistPreferences else { throw TokenStorageError.verificationFailed }
         let previous = current
         var updated = current
         transform(&updated)
@@ -278,6 +284,7 @@ final class PreferencesStore {
     }
 
     private func persist() {
+        guard canPersistPreferences else { return }
         guard let data = try? JSONEncoder().encode(current),
               var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
         for (key, token) in pendingLegacyTokens { json[key] = token }

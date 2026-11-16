@@ -75,4 +75,17 @@ final class KeychainMigrationTests: XCTestCase {
             XCTAssertEqual(try tokens.read(.vercel), "other-credential")
         }
     }
+
+    func testUnreadablePreferencesAreNeverOverwrittenByDefaults() throws {
+        try withStorage { defaults, tokens in
+            let original = Data(#"{"vercelToken":"legacy-credential","showProjects":"invalid"}"#.utf8)
+            defaults.set(original, forKey: PreferencesStore.storageKey)
+            let store = PreferencesStore(userDefaults: defaults, tokens: tokens)
+            XCTAssertNotNil(store.storageError)
+            XCTAssertThrowsError(try store.update { $0.showProjects = false })
+            XCTAssertEqual(defaults.data(forKey: PreferencesStore.storageKey), original)
+            XCTAssertNil(try tokens.read(.vercel))
+        }
+    }
+
 }
