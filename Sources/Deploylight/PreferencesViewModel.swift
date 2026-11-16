@@ -49,6 +49,8 @@ final class PreferencesViewModel: ObservableObject {
     @Published var menuBarStyle = MenuBarStyle.auto
     @Published var timeFormat = TimeFormat.clock
     @Published var showProjects = true
+    @Published var checkForUpdates = true
+    @Published private(set) var storageError: String?
     @Published var providerStyle = ProviderStyle.icon
     @Published var environmentStyle = EnvironmentStyle.badge
 
@@ -199,6 +201,8 @@ final class PreferencesViewModel: ObservableObject {
         menuBarStyle = current.menuBarStyle
         timeFormat = current.timeFormat
         showProjects = current.showProjects
+        checkForUpdates = current.checkForUpdates
+        storageError = store.storageError
         providerStyle = current.providerStyle
         environmentStyle = current.environmentStyle
 
@@ -261,31 +265,37 @@ final class PreferencesViewModel: ObservableObject {
     private func persistPreferences() {
         guard !isHydrating else { return }
 
-        store.update { preferences in
-            preferences.vercelToken = vercelToken.trimmingCharacters(in: .whitespacesAndNewlines)
-            preferences.teamId = Self.serialize(selectedTeamScopeIDs, mode: teamSelectionMode)
-            preferences.projectName = Self.serialize(selectedProjectNames, mode: projectSelectionMode)
-            preferences.cloudflareToken = cloudflareToken.trimmingCharacters(in: .whitespacesAndNewlines)
-            preferences.cloudflareAccountIds = Self.serialize(selectedCloudflareAccountIDs, mode: cloudflareAccountMode)
-            preferences.cloudflareWorkers = Self.serialize(selectedCloudflareWorkers, mode: cloudflareWorkerMode)
-            preferences.gitBranches = gitBranches
-            preferences.showProduction = showProduction
-            preferences.showPreview = showPreview
-            preferences.showReady = showReady
-            preferences.showBuilding = showBuilding
-            preferences.showError = showError
-            preferences.showQueued = showQueued
-            preferences.showCanceled = showCanceled
-            preferences.limitByCount = limitByCount > 0 ? limitByCount : nil
-            preferences.limitByHours = limitByHours > 0 ? limitByHours : nil
-            preferences.refreshIntervalIdle = refreshIntervalIdle
-            preferences.refreshIntervalBuilding = refreshIntervalBuilding
-            preferences.menuBarStyle = menuBarStyle
-            preferences.timeFormat = timeFormat
-            preferences.showProjects = showProjects
-            preferences.providerStyle = providerStyle
-            preferences.environmentStyle = environmentStyle
+        do {
+            try store.update { preferences in
+                preferences.vercelToken = vercelToken.trimmingCharacters(in: .whitespacesAndNewlines)
+                preferences.teamId = Self.serialize(selectedTeamScopeIDs, mode: teamSelectionMode)
+                preferences.projectName = Self.serialize(selectedProjectNames, mode: projectSelectionMode)
+                preferences.cloudflareToken = cloudflareToken.trimmingCharacters(in: .whitespacesAndNewlines)
+                preferences.cloudflareAccountIds = Self.serialize(selectedCloudflareAccountIDs, mode: cloudflareAccountMode)
+                preferences.cloudflareWorkers = Self.serialize(selectedCloudflareWorkers, mode: cloudflareWorkerMode)
+                preferences.gitBranches = gitBranches
+                preferences.showProduction = showProduction
+                preferences.showPreview = showPreview
+                preferences.showReady = showReady
+                preferences.showBuilding = showBuilding
+                preferences.showError = showError
+                preferences.showQueued = showQueued
+                preferences.showCanceled = showCanceled
+                preferences.limitByCount = limitByCount > 0 ? limitByCount : nil
+                preferences.limitByHours = limitByHours > 0 ? limitByHours : nil
+                preferences.refreshIntervalIdle = refreshIntervalIdle
+                preferences.refreshIntervalBuilding = refreshIntervalBuilding
+                preferences.menuBarStyle = menuBarStyle
+                preferences.timeFormat = timeFormat
+                preferences.showProjects = showProjects
+                preferences.checkForUpdates = checkForUpdates
+                preferences.providerStyle = providerStyle
+                preferences.environmentStyle = environmentStyle
+            }
+        } catch {
+            // Keep the edit visible so it can be retried; never include credentials in errors.
         }
+        storageError = store.storageError
     }
 
     /// An empty value means "all".

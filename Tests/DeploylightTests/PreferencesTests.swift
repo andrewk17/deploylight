@@ -24,6 +24,7 @@ final class PreferencesTests: XCTestCase {
         XCTAssertTrue(preferences.showProjects)
         XCTAssertEqual(preferences.providerStyle, .icon)
         XCTAssertEqual(preferences.environmentStyle, .badge)
+        XCTAssertTrue(preferences.checkForUpdates)
     }
 
     func testUnknownMenuBarStyleFallsBackToDefault() throws {
@@ -48,6 +49,7 @@ final class PreferencesTests: XCTestCase {
 
         let decoded = try JSONDecoder().decode(Preferences.self, from: JSONEncoder().encode(preferences))
 
+        preferences.cloudflareToken = "" // Credentials are deliberately excluded from new JSON.
         XCTAssertEqual(decoded, preferences)
         XCTAssertEqual(decoded.cloudflareWorkerList, ["api", "site"])
     }

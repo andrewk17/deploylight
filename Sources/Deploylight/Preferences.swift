@@ -66,6 +66,7 @@ struct Preferences: Codable, Equatable {
     var showProjects: Bool
     var providerStyle: ProviderStyle
     var environmentStyle: EnvironmentStyle
+    var checkForUpdates: Bool = true
 
     static let `default` = Preferences(
         vercelToken: "",
@@ -173,48 +174,111 @@ extension Preferences {
             timeFormat: TimeFormat(rawValue: try value(.timeFormat, defaults.timeFormat.rawValue)) ?? defaults.timeFormat,
             showProjects: try value(.showProjects, defaults.showProjects),
             providerStyle: ProviderStyle(rawValue: try value(.providerStyle, defaults.providerStyle.rawValue)) ?? defaults.providerStyle,
-            environmentStyle: EnvironmentStyle(rawValue: try value(.environmentStyle, defaults.environmentStyle.rawValue)) ?? defaults.environmentStyle
+            environmentStyle: EnvironmentStyle(rawValue: try value(.environmentStyle, defaults.environmentStyle.rawValue)) ?? defaults.environmentStyle,
+            checkForUpdates: try value(.checkForUpdates, true)
         )
+    }
+
+    // Tokens remain in memory for the existing UI/providers, but never enter new JSON.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(teamId, forKey: .teamId)
+        try container.encodeIfPresent(projectName, forKey: .projectName)
+        try container.encodeIfPresent(cloudflareAccountIds, forKey: .cloudflareAccountIds)
+        try container.encodeIfPresent(cloudflareWorkers, forKey: .cloudflareWorkers)
+        try container.encodeIfPresent(gitBranches, forKey: .gitBranches)
+        try container.encodeIfPresent(showProduction, forKey: .showProduction)
+        try container.encodeIfPresent(showPreview, forKey: .showPreview)
+        try container.encodeIfPresent(showReady, forKey: .showReady)
+        try container.encodeIfPresent(showBuilding, forKey: .showBuilding)
+        try container.encodeIfPresent(showError, forKey: .showError)
+        try container.encodeIfPresent(showQueued, forKey: .showQueued)
+        try container.encodeIfPresent(showCanceled, forKey: .showCanceled)
+        try container.encodeIfPresent(limitByCount, forKey: .limitByCount)
+        try container.encodeIfPresent(limitByHours, forKey: .limitByHours)
+        try container.encodeIfPresent(refreshIntervalIdle, forKey: .refreshIntervalIdle)
+        try container.encodeIfPresent(refreshIntervalBuilding, forKey: .refreshIntervalBuilding)
+        try container.encodeIfPresent(menuBarStyle, forKey: .menuBarStyle)
+        try container.encodeIfPresent(timeFormat, forKey: .timeFormat)
+        try container.encodeIfPresent(showProjects, forKey: .showProjects)
+        try container.encodeIfPresent(providerStyle, forKey: .providerStyle)
+        try container.encodeIfPresent(environmentStyle, forKey: .environmentStyle)
+        try container.encodeIfPresent(checkForUpdates, forKey: .checkForUpdates)
     }
 }
 
 final class PreferencesStore {
     static let shared = PreferencesStore()
-
     static let didChangeNotification = Notification.Name("PreferencesStoreDidChange")
+    static let storageKey = "vercelStatusPreferences"
 
-    private let storageKey = "vercelStatusPreferences"
     private let userDefaults: UserDefaults
+    private let tokens: KeychainTokenStore
+    // Retain a legacy token in its original storage until its Keychain read is confirmed.
+    private var pendingLegacyTokens: [String: String] = [:]
+    private(set) var storageError: String?
+    private(set) var current: Preferences
 
-    private(set) var current: Preferences {
-        didSet {
-            guard current != oldValue else { return }
+    init(userDefaults: UserDefaults = .standard, tokens: KeychainTokenStore = KeychainTokenStore()) {
+        self.userDefaults = userDefaults
+        self.tokens = tokens
+        let data = userDefaults.data(forKey: Self.storageKey)
+        current = data.flatMap { try? JSONDecoder().decode(Preferences.self, from: $0) } ?? .default
+        for provider in TokenProvider.allCases {
+            let legacy = current[keyPath: provider.preference]
+            if !legacy.isEmpty { pendingLegacyTokens[provider.legacyKey] = legacy }
+            do {
+                if !legacy.isEmpty {
+                    let existing = try tokens.read(provider)
+                    // Preserve both copies if they disagree; don't overwrite a different credential.
+                    guard existing == nil || existing == legacy else { throw TokenStorageError.conflict }
+                    try tokens.save(legacy, for: provider)
+                    pendingLegacyTokens.removeValue(forKey: provider.legacyKey)
+                } else {
+                    current[keyPath: provider.preference] = try tokens.read(provider) ?? ""
+                }
+            } catch {
+                storageError = "Couldn't access saved tokens in Keychain. Existing tokens have been kept; try again after unlocking your Keychain."
+            }
+        }
+        // Don't replace unrecognized/corrupt preferences during startup.
+        if data.map({ (try? JSONDecoder().decode(Preferences.self, from: $0)) != nil }) ?? true {
             persist()
+        }
+    }
+
+    func update(_ transform: (inout Preferences) -> Void) throws {
+        let previous = current
+        var updated = current
+        transform(&updated)
+        guard updated != current else { return }
+        do {
+            for provider in TokenProvider.allCases where updated[keyPath: provider.preference] != current[keyPath: provider.preference] {
+                try tokens.save(updated[keyPath: provider.preference], for: provider)
+                pendingLegacyTokens.removeValue(forKey: provider.legacyKey)
+                // If the next provider fails, the confirmed change still stays in memory.
+                current[keyPath: provider.preference] = updated[keyPath: provider.preference]
+            }
+        } catch {
+            storageError = "Couldn't save a token to Keychain. Your previous saved credentials have been kept. Please try again."
+            persist()
+            throw error
+        }
+        current = updated
+        storageError = pendingLegacyTokens.isEmpty ? nil : storageError
+        persist()
+        // Token changes also notify, even though they were assigned above.
+        if previous != current {
             NotificationCenter.default.post(name: Self.didChangeNotification, object: current)
         }
     }
 
-    private init(userDefaults: UserDefaults = .standard) {
-        self.userDefaults = userDefaults
-        if
-            let data = userDefaults.data(forKey: storageKey),
-            let decoded = try? JSONDecoder().decode(Preferences.self, from: data)
-        {
-            current = decoded
-        } else {
-            current = .default
-        }
-    }
-
-    func update(_ transform: (inout Preferences) -> Void) {
-        var updated = current
-        transform(&updated)
-        current = updated
-    }
-
     private func persist() {
-        if let data = try? JSONEncoder().encode(current) {
-            userDefaults.set(data, forKey: storageKey)
+        guard let data = try? JSONEncoder().encode(current),
+              var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        for (key, token) in pendingLegacyTokens { json[key] = token }
+        if let saved = try? JSONSerialization.data(withJSONObject: json) {
+            userDefaults.set(saved, forKey: Self.storageKey)
         }
     }
 }

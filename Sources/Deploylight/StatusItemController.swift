@@ -7,6 +7,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let menu = NSMenu()
     private let deploymentService = DeploymentService()
 
+    private let updateChecker = UpdateChecker()
+    private var updateTimer: Timer?
     private var refreshTimer: Timer?
     private var tickTimer: Timer?
     private var refreshTask: Task<Void, Never>?
@@ -60,9 +62,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.refreshDeployments(restartInFlight: true)
+                self?.checkForUpdates()
             }
         }
 
+        checkForUpdates()
+        let timer = Timer(timeInterval: 60 * 60, target: self, selector: #selector(checkForUpdates), userInfo: nil, repeats: true)
+        RunLoop.main.add(timer, forMode: .common)
+        updateTimer = timer
         startTickTimer()
         refreshDeployments()
     }
@@ -70,9 +77,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     func stop() {
         preferencesObserver.flatMap(NotificationCenter.default.removeObserver)
         preferencesObserver = nil
+        updateTimer?.invalidate()
+        updateChecker.stop()
         refreshTask?.cancel()
         refreshTimer?.invalidate()
         tickTimer?.invalidate()
+    }
+
+    @objc private func checkForUpdates() {
+        updateChecker.checkIfDue(enabled: PreferencesStore.shared.current.checkForUpdates)
     }
 
     // MARK: - Actions
@@ -306,6 +319,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         for provider in configuredProviders {
             let item = actionItem("Open \(provider.rawValue) Dashboard", #selector(openURL(_:)))
             item.representedObject = dashboardURL(for: provider, preferences: preferences)
+            menu.addItem(item)
+        }
+        if let update = updateChecker.available {
+            let item = actionItem("Update available: \(update.version.tag)", #selector(openURL(_:)))
+            item.representedObject = update.url
             menu.addItem(item)
         }
         menu.addItem(actionItem("Preferences…", #selector(openPreferences(_:)), key: ","))
