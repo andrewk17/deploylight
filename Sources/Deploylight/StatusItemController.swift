@@ -151,6 +151,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         refreshTimer?.invalidate()
+        if PreferencesStore.shared.storageError != nil {
+            PreferencesStore.shared.retryTokenStorage(notify: false)
+        }
         let preferences = PreferencesStore.shared.current
         configuredProviders = deploymentService.configuredProviders(preferences)
 
@@ -161,6 +164,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             deploymentsByID = [:]
             errors = [:]
             render()
+            if PreferencesStore.shared.storageError != nil { scheduleNextRefresh() }
             return
         }
 

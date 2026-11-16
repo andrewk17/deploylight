@@ -49,13 +49,17 @@ final class UpdateChecker {
 
     private let session: URLSession
     private let runningVersion: ReleaseVersion?
+    static let lastAttemptKey = "DeploylightUpdateLastAttempt"
+    private let userDefaults: UserDefaults
     private var lastAttempt: Date?
     private var task: Task<Void, Never>?
     private var enabled = false
     private(set) var available: AvailableUpdate?
 
     init(version: String? = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
-         session: URLSession? = nil) {
+         session: URLSession? = nil, userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+        lastAttempt = userDefaults.object(forKey: Self.lastAttemptKey) as? Date
         runningVersion = version.flatMap(ReleaseVersion.init)
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 8
@@ -75,7 +79,8 @@ final class UpdateChecker {
         }
         guard let runningVersion, task == nil,
               lastAttempt.map({ now.timeIntervalSince($0) >= 24 * 60 * 60 }) ?? true else { return nil }
-        lastAttempt = now // Failures wait a day too; never retry aggressively.
+        lastAttempt = now // Failures wait a day too, including across relaunches.
+        userDefaults.set(now, forKey: Self.lastAttemptKey)
         task = Task { [weak self] in
             guard let self else { return }
             defer { self.task = nil }

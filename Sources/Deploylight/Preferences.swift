@@ -217,14 +217,15 @@ final class PreferencesStore {
     static let storageKey = "vercelStatusPreferences"
 
     private let userDefaults: UserDefaults
-    private let tokens: KeychainTokenStore
+    private let tokens: any TokenStore
     private let canPersistPreferences: Bool
     // Retain a legacy token in its original storage until its Keychain read is confirmed.
     private var pendingLegacyTokens: [String: String] = [:]
+    private var unreadProviders = Set(TokenProvider.allCases)
     private(set) var storageError: String?
     private(set) var current: Preferences
 
-    init(userDefaults: UserDefaults = .standard, tokens: KeychainTokenStore = KeychainTokenStore()) {
+    init(userDefaults: UserDefaults = .standard, tokens: any TokenStore = KeychainTokenStore()) {
         self.userDefaults = userDefaults
         self.tokens = tokens
         let data = userDefaults.data(forKey: Self.storageKey)
@@ -234,25 +235,45 @@ final class PreferencesStore {
         for provider in TokenProvider.allCases {
             let legacy = current[keyPath: provider.preference]
             if !legacy.isEmpty { pendingLegacyTokens[provider.legacyKey] = legacy }
+        }
+        retryTokenStorage(notify: false)
+    }
+
+    /// Only unresolved providers touch Keychain again; lifecycle events and refreshes can retry safely.
+    func retryTokenStorage(notify: Bool = true) {
+        guard canPersistPreferences else {
+            storageError = "Couldn't read saved preferences. The original data has been kept; changes cannot be saved yet."
+            return
+        }
+        let previous = current
+        let previousError = storageError
+        for provider in TokenProvider.allCases where unreadProviders.contains(provider) || pendingLegacyTokens[provider.legacyKey] != nil {
             do {
-                if !legacy.isEmpty {
-                    let existing = try tokens.read(provider)
-                    // Preserve both copies if they disagree; don't overwrite a different credential.
-                    guard existing == nil || existing == legacy else { throw TokenStorageError.conflict }
-                    try tokens.save(legacy, for: provider)
+                if let legacy = pendingLegacyTokens[provider.legacyKey] {
+                    // An older app can write JSON after migration: that copy is the newer credential.
+                    try saveAndVerify(legacy, for: provider)
+                    current[keyPath: provider.preference] = legacy
                     pendingLegacyTokens.removeValue(forKey: provider.legacyKey)
                 } else {
                     current[keyPath: provider.preference] = try tokens.read(provider) ?? ""
                 }
+                unreadProviders.remove(provider)
             } catch {
-                storageError = "Couldn't access saved tokens in Keychain. Existing tokens have been kept; try again after unlocking your Keychain."
+                unreadProviders.insert(provider)
             }
         }
-        // Don't replace unrecognized/corrupt preferences during startup.
-        if canPersistPreferences {
-            persist()
-        } else {
-            storageError = "Couldn't read saved preferences. The original data has been kept; changes cannot be saved yet."
+        storageError = unreadProviders.isEmpty && pendingLegacyTokens.isEmpty ? nil :
+            "Couldn't access saved tokens in Keychain. Existing tokens have been kept; try again after unlocking your Keychain."
+        persist()
+        if notify && (previous != current || previousError != storageError) {
+            NotificationCenter.default.post(name: Self.didChangeNotification, object: current)
+        }
+    }
+
+    private func saveAndVerify(_ token: String, for provider: TokenProvider) throws {
+        try tokens.save(token, for: provider)
+        guard try tokens.read(provider) == (token.isEmpty ? nil : token) else {
+            throw TokenStorageError.verificationFailed
         }
     }
 
@@ -261,10 +282,15 @@ final class PreferencesStore {
         let previous = current
         var updated = current
         transform(&updated)
-        guard updated != current else { return }
         do {
             for provider in TokenProvider.allCases where updated[keyPath: provider.preference] != current[keyPath: provider.preference] {
-                try tokens.save(updated[keyPath: provider.preference], for: provider)
+                do {
+                    try saveAndVerify(updated[keyPath: provider.preference], for: provider)
+                } catch {
+                    unreadProviders.insert(provider)
+                    throw error
+                }
+                unreadProviders.remove(provider)
                 pendingLegacyTokens.removeValue(forKey: provider.legacyKey)
                 // If the next provider fails, the confirmed change still stays in memory.
                 current[keyPath: provider.preference] = updated[keyPath: provider.preference]
@@ -275,7 +301,7 @@ final class PreferencesStore {
             throw error
         }
         current = updated
-        storageError = pendingLegacyTokens.isEmpty ? nil : storageError
+        retryTokenStorage(notify: false)
         persist()
         // Token changes also notify, even though they were assigned above.
         if previous != current {

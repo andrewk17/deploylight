@@ -16,10 +16,14 @@ enum TokenProvider: String, CaseIterable {
 enum TokenStorageError: Error {
     case keychain(OSStatus)
     case verificationFailed
-    case conflict
 }
 
-struct KeychainTokenStore {
+protocol TokenStore {
+    func read(_ provider: TokenProvider) throws -> String?
+    func save(_ token: String, for provider: TokenProvider) throws
+}
+
+struct KeychainTokenStore: TokenStore {
     // Keep the historical bundle ID, including for command-line development builds.
     let service: String
 

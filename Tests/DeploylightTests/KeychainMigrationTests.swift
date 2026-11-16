@@ -58,21 +58,75 @@ final class KeychainMigrationTests: XCTestCase {
         }
     }
 
-    func testConflictingKeychainItemNeverDiscardsEitherToken() throws {
+    func testNewerPlaintextTokenReplacesConflictingKeychainItem() throws {
         try withStorage { defaults, tokens in
-            try tokens.save("other-credential", for: .vercel)
-            defaults.set(Data(#"{"vercelToken":"legacy-credential","cloudflareToken":"test-cf"}"#.utf8), forKey: PreferencesStore.storageKey)
+            try tokens.save("older-credential", for: .vercel)
+            defaults.set(Data(#"{"vercelToken":"newer-credential","cloudflareToken":"test-cf"}"#.utf8), forKey: PreferencesStore.storageKey)
+            let store = PreferencesStore(userDefaults: defaults, tokens: tokens)
+            XCTAssertNil(store.storageError)
+            XCTAssertEqual(store.current.vercelToken, "newer-credential")
+            XCTAssertEqual(try tokens.read(.vercel), "newer-credential")
+            XCTAssertNil(try savedJSON(defaults)["vercelToken"])
+            XCTAssertNil(try savedJSON(defaults)["cloudflareToken"])
+            let reopened = PreferencesStore(userDefaults: defaults, tokens: tokens)
+            XCTAssertEqual(reopened.current, store.current)
+        }
+    }
+
+    func testLegacyTokenSurvivesFailedMigrationAndUnchangedEditRetries() throws {
+        try withStorage { defaults, _ in
+            let tokens = FailingTokenStore()
+            tokens.failingProviders = [.vercel]
+            defaults.set(Data(#"{"vercelToken":"newer-credential","cloudflareToken":"test-cf"}"#.utf8), forKey: PreferencesStore.storageKey)
             let store = PreferencesStore(userDefaults: defaults, tokens: tokens)
             XCTAssertNotNil(store.storageError)
-            XCTAssertEqual(store.current.vercelToken, "legacy-credential")
-            XCTAssertEqual(try tokens.read(.vercel), "other-credential")
-            try store.update { $0.showProjects = false }
-            XCTAssertEqual(try savedJSON(defaults)["vercelToken"] as? String, "legacy-credential")
+            XCTAssertEqual(try savedJSON(defaults)["vercelToken"] as? String, "newer-credential")
             XCTAssertNil(try savedJSON(defaults)["cloudflareToken"])
-            XCTAssertEqual(try tokens.read(.cloudflare), "test-cf")
-            let reopened = PreferencesStore(userDefaults: defaults, tokens: tokens)
-            XCTAssertEqual(reopened.current.vercelToken, "legacy-credential")
-            XCTAssertEqual(try tokens.read(.vercel), "other-credential")
+            try store.update { $0.showProjects = false }
+            XCTAssertNotNil(store.storageError)
+            XCTAssertEqual(try savedJSON(defaults)["vercelToken"] as? String, "newer-credential")
+            tokens.failingProviders = []
+            try store.update { $0.vercelToken = "newer-credential" }
+            XCTAssertNil(store.storageError)
+            XCTAssertEqual(try tokens.read(.vercel), "newer-credential")
+            XCTAssertNil(try savedJSON(defaults)["vercelToken"])
+            XCTAssertFalse(store.current.showProjects)
+        }
+    }
+
+    func testMigratedInstallRetriesUnreadTokenWithoutErasingIt() throws {
+        try withStorage { defaults, _ in
+            let tokens = FailingTokenStore()
+            tokens.values = [.vercel: "saved-vercel", .cloudflare: "saved-cf"]
+            tokens.failingProviders = [.vercel]
+            let store = PreferencesStore(userDefaults: defaults, tokens: tokens)
+            XCTAssertNotNil(store.storageError)
+            XCTAssertEqual(store.current.vercelToken, "")
+            try store.update { $0.showProjects = false }
+            XCTAssertNotNil(store.storageError)
+            XCTAssertEqual(tokens.values[.vercel], "saved-vercel")
+            tokens.failingProviders = []
+            store.retryTokenStorage()
+            XCTAssertNil(store.storageError)
+            XCTAssertEqual(store.current.vercelToken, "saved-vercel")
+            XCTAssertEqual(store.current.cloudflareToken, "saved-cf")
+            XCTAssertNil(try savedJSON(defaults)["vercelToken"])
+        }
+    }
+
+    func testFailedReadbackKeepsPlaintextUntilVerified() throws {
+        try withStorage { defaults, _ in
+            let tokens = FailingTokenStore()
+            tokens.failReadback = true
+            defaults.set(Data(#"{"vercelToken":"newer-credential"}"#.utf8), forKey: PreferencesStore.storageKey)
+            let store = PreferencesStore(userDefaults: defaults, tokens: tokens)
+            XCTAssertNotNil(store.storageError)
+            XCTAssertEqual(tokens.values[.vercel], "newer-credential")
+            XCTAssertEqual(try savedJSON(defaults)["vercelToken"] as? String, "newer-credential")
+            tokens.failReadback = false
+            store.retryTokenStorage()
+            XCTAssertNil(store.storageError)
+            XCTAssertNil(try savedJSON(defaults)["vercelToken"])
         }
     }
 
@@ -88,4 +142,22 @@ final class KeychainMigrationTests: XCTestCase {
         }
     }
 
+}
+
+private final class FailingTokenStore: TokenStore {
+    var values: [TokenProvider: String] = [:]
+    var failingProviders: Set<TokenProvider> = []
+    var failReadback = false
+
+    func read(_ provider: TokenProvider) throws -> String? {
+        if failingProviders.contains(provider) || (failReadback && values[provider] != nil) {
+            throw TokenStorageError.verificationFailed
+        }
+        return values[provider]
+    }
+
+    func save(_ token: String, for provider: TokenProvider) throws {
+        guard !failingProviders.contains(provider) else { throw TokenStorageError.verificationFailed }
+        values[provider] = token.isEmpty ? nil : token
+    }
 }

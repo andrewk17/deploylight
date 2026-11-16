@@ -17,3 +17,14 @@ DerivedData/
 # Cloudflare
 .env.cloudflare.local
 .wrangler/
+
+# Local secrets and signing credentials (public repository)
+.env
+.env.*
+!.env.example
+.dev.vars
+*.p8
+*.p12
+*.cer
+*.mobileprovision
+AuthKey_*

@@ -18,13 +18,20 @@ private final class ReleaseProtocol: URLProtocol {
 
 @MainActor
 final class UpdateCheckerTests: XCTestCase {
-    private func checker(version: String = "0.4.0") -> UpdateChecker {
+    private func defaults() -> UserDefaults {
+        let suite = "DeploylightUpdateTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        return defaults
+    }
+
+    private func checker(version: String = "0.4.0", userDefaults: UserDefaults? = nil) -> UpdateChecker {
         ReleaseProtocol.response = #"{"tag_name":"v0.10.0","prerelease":false,"draft":false}"#
         ReleaseProtocol.status = 200
         ReleaseProtocol.requests = []
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ReleaseProtocol.self]
-        return UpdateChecker(version: version, session: URLSession(configuration: configuration))
+        return UpdateChecker(version: version, session: URLSession(configuration: configuration), userDefaults: userDefaults ?? defaults())
     }
 
     func testStableReleaseCheckIsUnauthenticatedDailyAndCanBeDisabled() async {
@@ -66,6 +73,22 @@ final class UpdateCheckerTests: XCTestCase {
         await failed.checkIfDue(enabled: true)?.value
         XCTAssertNil(failed.available)
         XCTAssertNil(failed.checkIfDue(enabled: true))
+    }
+
+    func testDailyThrottleSurvivesRelaunchIncludingFailedChecks() async {
+        for status in [200, 403] {
+            let defaults = defaults()
+            let first = checker(userDefaults: defaults)
+            ReleaseProtocol.status = status
+            let now = Date()
+            await first.checkIfDue(enabled: true, now: now)?.value
+            XCTAssertNotNil(defaults.object(forKey: UpdateChecker.lastAttemptKey))
+            let relaunched = checker(userDefaults: defaults)
+            XCTAssertNil(relaunched.checkIfDue(enabled: true, now: now.addingTimeInterval(3600)))
+            XCTAssertTrue(ReleaseProtocol.requests.isEmpty)
+            await relaunched.checkIfDue(enabled: true, now: now.addingTimeInterval(86400))?.value
+            XCTAssertEqual(ReleaseProtocol.requests.count, 1)
+        }
     }
 
     func testSemanticComparisonUsesNumbers() {

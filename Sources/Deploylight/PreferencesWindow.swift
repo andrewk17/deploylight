@@ -35,6 +35,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
 
     func show() {
         guard let window else { return }
+        PreferencesStore.shared.retryTokenStorage()
         viewModel.reset()
         if !window.isVisible {
             window.center()
