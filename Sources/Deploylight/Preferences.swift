@@ -140,6 +140,10 @@ struct Preferences: Codable, Equatable {
 }
 
 extension Preferences {
+    enum CodingKeys: String, CodingKey {
+        case vercelToken, teamId, projectName, cloudflareToken, cloudflareAccountIds, cloudflareWorkers, gitBranches, showProduction, showPreview, showReady, showBuilding, showError, showQueued, showCanceled, limitByCount, limitByHours, refreshIntervalIdle, refreshIntervalBuilding, menuBarStyle, timeFormat, showProjects, providerStyle, environmentStyle, checkForUpdates
+    }
+
     /// Missing keys fall back to defaults so preferences saved by older versions still load.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)

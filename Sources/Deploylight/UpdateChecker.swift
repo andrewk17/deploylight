@@ -9,7 +9,13 @@ struct ReleaseVersion: Comparable, Equatable {
         let version = value.hasPrefix("v") ? String(value.dropFirst()) : value
         // Stable releases only. Build metadata doesn't affect semantic precedence.
         let parts = version.split(separator: "+", maxSplits: 1, omittingEmptySubsequences: false)
-        guard !version.contains("-"), parts.count == 1 || !parts[1].isEmpty else { return nil }
+        guard !parts[0].contains("-") else { return nil }
+        if parts.count == 2 {
+            let identifiers = parts[1].split(separator: ".", omittingEmptySubsequences: false)
+            guard identifiers.allSatisfy({ !$0.isEmpty && $0.allSatisfy {
+                $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-")
+            } }) else { return nil }
+        }
         let numbers = parts[0].split(separator: ".", omittingEmptySubsequences: false)
         guard numbers.count == 3 else { return nil }
         let parsed = numbers.compactMap { part -> Int? in
