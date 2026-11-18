@@ -15,7 +15,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusController = StatusItemController()
         statusController?.start()
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(retryTokenStorage), name: NSWorkspace.didWakeNotification, object: nil
+        )
         LegacyApp.offerReplacement()
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        retryTokenStorage()
+    }
+
+    @objc private func retryTokenStorage() {
+        PreferencesStore.shared.retryTokenStorage()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

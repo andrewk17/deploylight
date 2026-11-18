@@ -49,6 +49,8 @@ final class PreferencesViewModel: ObservableObject {
     @Published var menuBarStyle = MenuBarStyle.auto
     @Published var timeFormat = TimeFormat.clock
     @Published var showProjects = true
+    @Published var checkForUpdates = true
+    @Published private(set) var storageError: String?
     @Published var providerStyle = ProviderStyle.icon
     @Published var environmentStyle = EnvironmentStyle.badge
 
@@ -179,10 +181,32 @@ final class PreferencesViewModel: ObservableObject {
         }
     }
 
+    private var storedVercelToken = ""
+    private var storedCloudflareToken = ""
+
+    /// A retry may recover tokens while this window is open. Preserve any edits in progress.
+    private func syncStoredTokens() {
+        isHydrating = true
+        defer { isHydrating = false }
+        if vercelToken.trimmingCharacters(in: .whitespacesAndNewlines) == storedVercelToken,
+           vercelToken != store.current.vercelToken {
+            vercelToken = store.current.vercelToken
+        }
+        if cloudflareToken.trimmingCharacters(in: .whitespacesAndNewlines) == storedCloudflareToken,
+           cloudflareToken != store.current.cloudflareToken {
+            cloudflareToken = store.current.cloudflareToken
+        }
+        storedVercelToken = store.current.vercelToken
+        storedCloudflareToken = store.current.cloudflareToken
+        if storageError != store.storageError { storageError = store.storageError }
+    }
+
     private func hydrate(from current: Preferences) {
         isHydrating = true
         defer { isHydrating = false }
 
+        storedVercelToken = current.vercelToken
+        storedCloudflareToken = current.cloudflareToken
         vercelToken = current.vercelToken
         gitBranches = current.gitBranches
         showProduction = current.showProduction
@@ -199,6 +223,8 @@ final class PreferencesViewModel: ObservableObject {
         menuBarStyle = current.menuBarStyle
         timeFormat = current.timeFormat
         showProjects = current.showProjects
+        checkForUpdates = current.checkForUpdates
+        storageError = store.storageError
         providerStyle = current.providerStyle
         environmentStyle = current.environmentStyle
 
@@ -220,6 +246,11 @@ final class PreferencesViewModel: ObservableObject {
     }
 
     private func setupObservers() {
+        NotificationCenter.default.publisher(for: PreferencesStore.didChangeNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.syncStoredTokens() }
+            .store(in: &cancellables)
+
         // Edits auto-save once typing pauses, which also lets objectWillChange's new value land
         // before it's read. Unchanged preferences are a no-op in the store; closing the window flushes.
         objectWillChange
@@ -261,30 +292,43 @@ final class PreferencesViewModel: ObservableObject {
     private func persistPreferences() {
         guard !isHydrating else { return }
 
-        store.update { preferences in
-            preferences.vercelToken = vercelToken.trimmingCharacters(in: .whitespacesAndNewlines)
-            preferences.teamId = Self.serialize(selectedTeamScopeIDs, mode: teamSelectionMode)
-            preferences.projectName = Self.serialize(selectedProjectNames, mode: projectSelectionMode)
-            preferences.cloudflareToken = cloudflareToken.trimmingCharacters(in: .whitespacesAndNewlines)
-            preferences.cloudflareAccountIds = Self.serialize(selectedCloudflareAccountIDs, mode: cloudflareAccountMode)
-            preferences.cloudflareWorkers = Self.serialize(selectedCloudflareWorkers, mode: cloudflareWorkerMode)
-            preferences.gitBranches = gitBranches
-            preferences.showProduction = showProduction
-            preferences.showPreview = showPreview
-            preferences.showReady = showReady
-            preferences.showBuilding = showBuilding
-            preferences.showError = showError
-            preferences.showQueued = showQueued
-            preferences.showCanceled = showCanceled
-            preferences.limitByCount = limitByCount > 0 ? limitByCount : nil
-            preferences.limitByHours = limitByHours > 0 ? limitByHours : nil
-            preferences.refreshIntervalIdle = refreshIntervalIdle
-            preferences.refreshIntervalBuilding = refreshIntervalBuilding
-            preferences.menuBarStyle = menuBarStyle
-            preferences.timeFormat = timeFormat
-            preferences.showProjects = showProjects
-            preferences.providerStyle = providerStyle
-            preferences.environmentStyle = environmentStyle
+        do {
+            try store.update { preferences in
+                if vercelToken.trimmingCharacters(in: .whitespacesAndNewlines) != storedVercelToken {
+                    preferences.vercelToken = vercelToken.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                preferences.teamId = Self.serialize(selectedTeamScopeIDs, mode: teamSelectionMode)
+                preferences.projectName = Self.serialize(selectedProjectNames, mode: projectSelectionMode)
+                if cloudflareToken.trimmingCharacters(in: .whitespacesAndNewlines) != storedCloudflareToken {
+                    preferences.cloudflareToken = cloudflareToken.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                preferences.cloudflareAccountIds = Self.serialize(selectedCloudflareAccountIDs, mode: cloudflareAccountMode)
+                preferences.cloudflareWorkers = Self.serialize(selectedCloudflareWorkers, mode: cloudflareWorkerMode)
+                preferences.gitBranches = gitBranches
+                preferences.showProduction = showProduction
+                preferences.showPreview = showPreview
+                preferences.showReady = showReady
+                preferences.showBuilding = showBuilding
+                preferences.showError = showError
+                preferences.showQueued = showQueued
+                preferences.showCanceled = showCanceled
+                preferences.limitByCount = limitByCount > 0 ? limitByCount : nil
+                preferences.limitByHours = limitByHours > 0 ? limitByHours : nil
+                preferences.refreshIntervalIdle = refreshIntervalIdle
+                preferences.refreshIntervalBuilding = refreshIntervalBuilding
+                preferences.menuBarStyle = menuBarStyle
+                preferences.timeFormat = timeFormat
+                preferences.showProjects = showProjects
+                preferences.checkForUpdates = checkForUpdates
+                preferences.providerStyle = providerStyle
+                preferences.environmentStyle = environmentStyle
+            }
+            syncStoredTokens()
+        } catch {
+            // Keep the edit visible so it can be retried; never include credentials in errors.
+        }
+        if storageError != store.storageError {
+            storageError = store.storageError
         }
     }
 

@@ -35,6 +35,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
 
     func show() {
         guard let window else { return }
+        PreferencesStore.shared.retryTokenStorage()
         viewModel.reset()
         if !window.isVisible {
             window.center()
@@ -77,7 +78,7 @@ enum PreferencesPane: CaseIterable {
     /// Accounts scrolls once providers list their teams and Workers; the others fit.
     private var height: CGFloat {
         switch self {
-        case .general: 400
+        case .general: 450
         case .menu: 545
         case .accounts: 600
         case .filters: 480
@@ -103,6 +104,9 @@ struct GeneralPane: View {
 
     var body: some View {
         Form {
+            if let error = viewModel.storageError {
+                Text(error).foregroundStyle(.red)
+            }
             Section("Menu Bar") {
                 MenuBarPreview(style: viewModel.menuBarStyle, timeFormat: viewModel.timeFormat)
 
@@ -121,6 +125,7 @@ struct GeneralPane: View {
 
             Section {
                 OpenAtLoginToggle()
+                Toggle("Check for updates", isOn: $viewModel.checkForUpdates)
             }
 
             Section("Refresh") {
@@ -391,6 +396,9 @@ struct AccountsPane: View {
 
     var body: some View {
         Form {
+            if let error = viewModel.storageError {
+                Text(error).foregroundStyle(.red)
+            }
             Section {
                 TokenRow(
                     token: $viewModel.vercelToken,

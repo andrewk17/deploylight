@@ -19,6 +19,12 @@ Deploylight is a lightweight, open-source **macOS menu bar app** that shows your
 - Native Swift app — lightweight and fast
 - Quick access to deployment details from the menu bar
 
+## Next version: 0.4.0 (unreleased)
+
+- API tokens move to macOS Keychain automatically; existing settings are preserved.
+- An optional daily update check adds a release link to the menu when a newer stable
+  version is available. It never downloads or installs an update automatically.
+
 ## Installation
 
 ### Pre-built Binary (Easiest)

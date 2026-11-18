@@ -8,10 +8,8 @@ APP_DIR="$ROOT/build/${PRODUCT_NAME}.app"
 # Kept from the app's original name so existing installs keep their settings and
 # third-party install recipes keep matching the code signature.
 BUNDLE_ID="com.andrew.vercel-deployment-menu-bar"
-# Defaults to the latest release tag, skipping pre-releases; override with VERSION=x.y.z
-# or VERSION=x.y.z-beta.1.
-VERSION="${VERSION:-$({ git -C "$ROOT" describe --tags --abbrev=0 --exclude '*-*' 2>/dev/null || true; } | sed 's/^v//')}"
-VERSION="${VERSION:-0.0.0}"
+# Override with VERSION=x.y.z (or x.y.z-beta.1) when packaging a preview.
+VERSION="${VERSION:-$(cat "$ROOT/VERSION")}"
 # Bundle versions must be numeric, so a pre-release suffix only appears in the file name.
 BUNDLE_VERSION="${VERSION%%-*}"
 export VERSION
