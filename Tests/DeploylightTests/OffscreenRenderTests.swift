@@ -82,7 +82,11 @@ final class OffscreenRenderTests: XCTestCase {
         menu.spacing = 5
         menu.edgeInsets = NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
         menu.wantsLayer = true
-        menu.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        let light = NSAppearance(named: .aqua)
+        menu.appearance = light
+        light?.performAsCurrentDrawingAppearance {
+            menu.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        }
         var examples: [(Deployment.Provider, String, Deployment.State, String, Deployment.Target)] = [
             (.vercel, "web", .ready, "main", .production),
             (.cloudflare, "edge-cache", .ready, "main", .production),
