@@ -60,6 +60,12 @@ final class PreferencesViewModel: ObservableObject {
     @Published var cloudflareWorkerMode = SelectionMode.all
     @Published var selectedCloudflareWorkers: Set<String> = []
 
+    @Published var githubToken = ""
+    @Published var githubRepositoryMode = SelectionMode.all
+    @Published var selectedGitHubRepositories: Set<String> = []
+    @Published var githubWorkflowMode = SelectionMode.all
+    @Published var selectedGitHubWorkflows: Set<String> = []
+
     @Published var teamSelectionMode = SelectionMode.all
     @Published var selectedTeamScopeIDs: Set<String> = []
     @Published var projectSelectionMode = SelectionMode.all
@@ -76,6 +82,12 @@ final class PreferencesViewModel: ObservableObject {
     @Published private(set) var cloudflareLoading = false
     @Published private(set) var cloudflareOptionsErrorMessage: String?
 
+    @Published private(set) var availableGitHubRepositories: [SelectionOption] = []
+    @Published private(set) var githubLoading = false
+    @Published private var githubWatches: [GitHubWatch] = []
+    @Published private var githubLogin: String?
+    @Published private var githubOptionsErrorMessage: String?
+
     private static let personalScope = SelectionOption(
         id: Preferences.personalScopeIdentifier,
         title: "Personal Account",
@@ -85,24 +97,29 @@ final class PreferencesViewModel: ObservableObject {
     private let store: PreferencesStore
     private let vercelClient: VercelClient
     private let cloudflareClient: CloudflareClient
+    private let githubClient: GitHubClient
 
     private var cancellables: Set<AnyCancellable> = []
     private var vercelLookupTask: Task<Void, Never>?
     private var cloudflareLookupTask: Task<Void, Never>?
+    private var githubLookupTask: Task<Void, Never>?
     private var isHydrating = false
 
     init(
         store: PreferencesStore,
         vercelClient: VercelClient = VercelClient(),
-        cloudflareClient: CloudflareClient = CloudflareClient()
+        cloudflareClient: CloudflareClient = CloudflareClient(),
+        githubClient: GitHubClient = GitHubClient()
     ) {
         self.store = store
         self.vercelClient = vercelClient
         self.cloudflareClient = cloudflareClient
+        self.githubClient = githubClient
         hydrate(from: store.current)
         setupObservers()
         refreshVercelOptions(reloadTeams: true)
         refreshCloudflareOptions()
+        refreshGitHubOptions()
     }
 
     var hasVercelToken: Bool {
@@ -111,6 +128,27 @@ final class PreferencesViewModel: ObservableObject {
 
     var hasCloudflareToken: Bool {
         !cloudflareToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var hasGitHubToken: Bool {
+        !githubToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var githubStatus: ConnectionStatus {
+        guard hasGitHubToken else { return .notConnected }
+        if githubLoading { return .checking }
+        if let message = githubOptionsErrorMessage { return .failed(message) }
+        return githubLogin.map(ConnectionStatus.connected) ?? .checking
+    }
+
+    var availableGitHubWorkflows: [SelectionOption] {
+        Self.options(githubWatches.map { SelectionOption(id: $0.id, title: $0.title) }, keeping: selectedGitHubWorkflows)
+    }
+
+    var githubWatchLimitReached: Bool {
+        guard hasGitHubToken, !githubLoading, githubOptionsErrorMessage == nil else { return false }
+        let ids = githubWorkflowMode == .selected ? selectedGitHubWorkflows : []
+        return githubWatches.filter { $0.matches(workflowIDs: ids) }.count > GitHubActionsProvider.watchLimit
     }
 
     var vercelStatus: ConnectionStatus {
@@ -149,6 +187,7 @@ final class PreferencesViewModel: ObservableObject {
         hydrate(from: store.current)
         refreshVercelOptions(reloadTeams: true)
         refreshCloudflareOptions()
+        refreshGitHubOptions()
     }
 
     func save() {
@@ -183,6 +222,7 @@ final class PreferencesViewModel: ObservableObject {
 
     private var storedVercelToken = ""
     private var storedCloudflareToken = ""
+    private var storedGitHubToken = ""
 
     /// A retry may recover tokens while this window is open. Preserve any edits in progress.
     private func syncStoredTokens() {
@@ -196,8 +236,13 @@ final class PreferencesViewModel: ObservableObject {
            cloudflareToken != store.current.cloudflareToken {
             cloudflareToken = store.current.cloudflareToken
         }
+        if githubToken.trimmingCharacters(in: .whitespacesAndNewlines) == storedGitHubToken,
+           githubToken != store.current.githubToken {
+            githubToken = store.current.githubToken
+        }
         storedVercelToken = store.current.vercelToken
         storedCloudflareToken = store.current.cloudflareToken
+        storedGitHubToken = store.current.githubToken
         if storageError != store.storageError { storageError = store.storageError }
     }
 
@@ -207,6 +252,7 @@ final class PreferencesViewModel: ObservableObject {
 
         storedVercelToken = current.vercelToken
         storedCloudflareToken = current.cloudflareToken
+        storedGitHubToken = current.githubToken
         vercelToken = current.vercelToken
         gitBranches = current.gitBranches
         showProduction = current.showProduction
@@ -243,6 +289,14 @@ final class PreferencesViewModel: ObservableObject {
         let workers = current.cloudflareWorkerList
         cloudflareWorkerMode = workers.isEmpty ? .all : .selected
         selectedCloudflareWorkers = Set(workers)
+
+        githubToken = current.githubToken
+        let repositories = current.githubRepositoryList
+        githubRepositoryMode = repositories.isEmpty ? .all : .selected
+        selectedGitHubRepositories = Set(repositories.map { $0.lowercased() })
+        let workflows = current.githubWorkflowList
+        githubWorkflowMode = workflows.isEmpty ? .all : .selected
+        selectedGitHubWorkflows = Set(workflows.map { $0.lowercased() })
     }
 
     private func setupObservers() {
@@ -287,6 +341,15 @@ final class PreferencesViewModel: ObservableObject {
         .receive(on: RunLoop.main)
         .sink { [weak self] in self?.refreshCloudflareOptions() }
         .store(in: &cancellables)
+
+        Publishers.Merge3(
+            $githubToken.removeDuplicates().dropFirst().map { _ in () },
+            $githubRepositoryMode.removeDuplicates().dropFirst().map { _ in () },
+            $selectedGitHubRepositories.removeDuplicates().dropFirst().map { _ in () }
+        )
+        .debounce(for: .milliseconds(500), scheduler: RunLoop.main)
+        .sink { [weak self] in self?.refreshGitHubOptions() }
+        .store(in: &cancellables)
     }
 
     private func persistPreferences() {
@@ -304,6 +367,11 @@ final class PreferencesViewModel: ObservableObject {
                 }
                 preferences.cloudflareAccountIds = Self.serialize(selectedCloudflareAccountIDs, mode: cloudflareAccountMode)
                 preferences.cloudflareWorkers = Self.serialize(selectedCloudflareWorkers, mode: cloudflareWorkerMode)
+                if githubToken.trimmingCharacters(in: .whitespacesAndNewlines) != storedGitHubToken {
+                    preferences.githubToken = githubToken.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                preferences.githubRepositories = Self.serialize(selectedGitHubRepositories, mode: githubRepositoryMode)
+                preferences.githubWorkflows = Self.serialize(selectedGitHubWorkflows, mode: githubWorkflowMode)
                 preferences.gitBranches = gitBranches
                 preferences.showProduction = showProduction
                 preferences.showPreview = showPreview
@@ -443,6 +511,45 @@ final class PreferencesViewModel: ObservableObject {
             }
         }
         cloudflareLoading = false
+    }
+
+    func refreshGitHubOptions() {
+        guard !isHydrating else { return }
+        githubLookupTask?.cancel()
+        let token = githubToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        githubOptionsErrorMessage = nil
+        guard !token.isEmpty else {
+            githubLogin = nil
+            availableGitHubRepositories = []
+            githubWatches = []
+            githubLoading = false
+            return
+        }
+
+        githubLoading = true
+        let selected = githubRepositoryMode == .selected ? selectedGitHubRepositories : []
+        githubLookupTask = Task { [weak self] in
+            await self?.loadGitHubOptions(token: token, selected: selected)
+        }
+    }
+
+    private func loadGitHubOptions(token: String, selected: Set<String>) async {
+        do {
+            githubLogin = try await githubClient.login(token: token)
+            let repositories = try await githubClient.repositories(token: token)
+            try Task.checkCancellation()
+            availableGitHubRepositories = Self.options(repositories.map {
+                SelectionOption(id: $0.fullName.lowercased(), title: $0.fullName)
+            }, keeping: selectedGitHubRepositories)
+            let scope = repositories.filter { selected.isEmpty || selected.contains($0.fullName.lowercased()) }
+            let watches = try await githubClient.watches(in: scope, token: token)
+            try Task.checkCancellation()
+            githubWatches = watches
+        } catch {
+            guard !Task.isCancelled else { return }
+            if !Self.isCancellation(error) { githubOptionsErrorMessage = error.localizedDescription }
+        }
+        githubLoading = false
     }
 
     /// Appends saved selections a lookup didn't return. A failed request or a change in access

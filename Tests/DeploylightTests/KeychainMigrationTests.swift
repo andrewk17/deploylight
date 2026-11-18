@@ -47,6 +47,26 @@ final class KeychainMigrationTests: XCTestCase {
         }
     }
 
+    func testGitHubTokenRoundTripsThroughKeychainOnly() throws {
+        try withStorage { defaults, tokens in
+            let store = PreferencesStore(userDefaults: defaults, tokens: tokens)
+            XCTAssertFalse(store.current.hasGitHubToken)
+            try store.update {
+                $0.githubToken = "fixture-github"
+                $0.githubRepositories = "owner/worker"
+                $0.githubWorkflows = "owner/worker#123"
+            }
+            XCTAssertEqual(try tokens.read(.github), "fixture-github")
+            XCTAssertNil(try savedJSON(defaults)["githubToken"])
+            let reopened = PreferencesStore(userDefaults: defaults, tokens: tokens)
+            XCTAssertEqual(reopened.current, store.current)
+            try reopened.update { $0.githubToken = "" }
+            XCTAssertNil(try tokens.read(.github))
+            XCTAssertFalse(PreferencesStore(userDefaults: defaults, tokens: tokens).current.hasGitHubToken)
+            XCTAssertNil(try savedJSON(defaults)["githubToken"])
+        }
+    }
+
     func testInterruptedMigrationWithMatchingKeychainCopyFinishesSafely() throws {
         try withStorage { defaults, tokens in
             try tokens.save("test-vercel", for: .vercel)

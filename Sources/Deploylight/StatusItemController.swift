@@ -280,7 +280,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         shownTitles = [:]
 
         if configuredProviders.isEmpty {
-            menu.addItem(disabledItem("Add a Vercel or Cloudflare token in Preferences"))
+            menu.addItem(disabledItem("Add a provider token in Preferences"))
             menu.addItem(.separator())
         } else {
             for provider in Deployment.Provider.allCases {
@@ -349,6 +349,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 return URL(string: "https://dash.cloudflare.com/\(accountIds[0])/workers-and-pages")
             }
             return URL(string: "https://dash.cloudflare.com/")
+        case .github:
+            let repositories = preferences.githubRepositoryList
+            if repositories.count == 1 {
+                return URL(string: "https://github.com/\(repositories[0])/actions")
+            }
+            return URL(string: "https://github.com/")
         }
     }
 

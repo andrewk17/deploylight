@@ -5,6 +5,7 @@ struct Deployment: Equatable {
     enum Provider: String, CaseIterable {
         case vercel = "Vercel"
         case cloudflare = "Cloudflare"
+        case github = "GitHub"
     }
 
     enum State: Hashable {
@@ -54,7 +55,7 @@ struct DeploymentSnapshot {
 final class DeploymentService {
     private let providers: [DeploymentProvider]
 
-    init(providers: [DeploymentProvider] = [VercelDeploymentProvider(), CloudflareBuildsProvider()]) {
+    init(providers: [DeploymentProvider] = [VercelDeploymentProvider(), CloudflareBuildsProvider(), GitHubActionsProvider()]) {
         self.providers = providers
     }
 

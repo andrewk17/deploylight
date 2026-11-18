@@ -2,9 +2,9 @@
 
 # Deploylight
 
-**Vercel and Cloudflare deploy status in your Mac menu bar.**
+**Vercel, Cloudflare, and GitHub Actions deploy status in your Mac menu bar.**
 
-Deploylight is a lightweight, open-source **macOS menu bar app** that shows your **deployment status** in real time. It works with **Vercel** deployments and **Cloudflare Workers Builds**. See build/ready/error status at a glance and jump to details with one click.
+Deploylight is a lightweight, open-source **macOS menu bar app** that shows your **deployment status** in real time. It works with **Vercel** deployments, **Cloudflare Workers Builds**, and **GitHub Actions** workflow runs. See build/ready/error status at a glance and jump to details with one click.
 
 [Website](https://deploylight.andrewkim.me/) · *Formerly Vercel Deployment Menu Bar.*
 
@@ -12,7 +12,7 @@ Deploylight is a lightweight, open-source **macOS menu bar app** that shows your
 
 **Features**
 - Real-time deployment status (build, ready, error)
-- Vercel deployments and Cloudflare Workers Builds, merged into one list
+- Vercel deployments, Cloudflare Workers Builds, and GitHub Actions runs, merged into one list
 - Vercel personal or team tokens
 - Team, project, branch, and state filters
 - Notarized, code-signed app (no Gatekeeper warnings)
@@ -32,7 +32,7 @@ Deploylight is a lightweight, open-source **macOS menu bar app** that shows your
 1. Download the latest release from the [Releases](https://github.com/andrewk17/deploylight/releases) page
 2. Unzip and move the app to your Applications folder
 3. Launch the app
-4. Click the menu bar icon and select "Preferences" to add your Vercel and/or Cloudflare API token
+4. Click the menu bar icon and select "Preferences" to add a token for the providers you use
 
 ### Build from Source
 
@@ -116,36 +116,47 @@ Deploylight shows Cloudflare Workers that build from a GitHub or GitLab reposito
 
 It must be a **user** API token (created from your profile). Account-owned tokens can't read Workers Builds.
 
-Workers deployed directly with `wrangler deploy` (from your machine or another CI) don't create builds, so they won't appear.
+Workers deployed directly with `wrangler deploy` don't create Workers Builds. If the command runs in GitHub Actions, you can show the workflow runs instead.
 
 Builds of a Worker's production branch show as **Production**. Builds of other branches and pull requests, which upload a preview version instead of deploying, show as **Preview**.
 
-### Step 3: Configure the App
+### Step 3 (Optional): Generate a GitHub token
+
+1. Go to [GitHub → New fine-grained personal access token](https://github.com/settings/personal-access-tokens/new).
+2. Select the repositories you want to monitor and grant **Actions: Read-only**. GitHub adds **Metadata: Read-only** automatically.
+3. Generate the token and copy it. A classic personal access token or a GitHub CLI token with the `repo` scope also works.
+
+By default, Deploylight shows runs from workflows with `deploy` in the workflow name or file path (case-insensitive). Runs on the repository's default branch triggered by a push, manual dispatch, schedule, or release show as **Production**; other runs show as **Preview**.
+
+### Step 4: Configure the App
 
 1. Launch Deploylight from your Applications folder
 2. Click the menu bar icon and select "Preferences…"
-3. Paste your Vercel and/or Cloudflare token. Changes save automatically.
+3. Paste the tokens for the providers you use. Changes save automatically.
 4. Optionally narrow what's shown:
    - **Team Scopes** and **Projects** (Vercel): all, or specific ones
    - **Accounts** and **Workers** (Cloudflare): all, or specific ones
+   - **Repositories** and **Workflows** (GitHub): all or specific repositories, deploy workflows or specific workflows
    - **Filters**: git branches, production/preview, and deployment states
    - **Menu Bar** (General): whether the project and build time appear next to the status icon, and the time format
    - **Menu**: how rows mark the provider and environment, how many recent deployments to list, and whether to show the Projects section
 
 The status icon reflects an in-progress build if there is one, otherwise the latest deployment. By default, the project and build time appear next to it only while a build is running; set **Show project and build time** to **Always** or **Never** to change that.
 
-The menu lists recent deployments from both providers, newest first. Each row shows the provider (a triangle for Vercel, a cloud for Cloudflare), a badge for production or preview, and the build time: "Building 1:12" while it runs, then "Built in 2:56" from the start of the build to the end. You can switch the provider and environment to plain text or hide them under **Menu** in Preferences. Below the recent list, the **Projects** section shows each project's latest production deployment, with its recent history in a submenu. Click any deployment to open it in Vercel or the Cloudflare dashboard.
+The menu lists recent deployments from all configured providers, newest first. Each row shows the provider (a triangle for Vercel, a cloud for Cloudflare, a branch for GitHub), a badge for production or preview, and the build time: "Building 1:12" while it runs, then "Built in 2:56" from the start of the build to the end. You can switch the provider and environment to plain text or hide them under **Menu** in Preferences. Below the recent list, the **Projects** section shows each project's latest production deployment, with its recent history in a submenu. Click any deployment to open it in its provider.
 
 ## How It Works
 
-The app polls the Vercel deployments API and the Cloudflare Workers Builds API, merges the results, and updates the menu bar icon based on deployment states. It polls faster while a build is running.
+The app polls the Vercel deployments, Cloudflare Workers Builds, and GitHub Actions APIs, merges the results, and updates the menu bar icon based on deployment states. It polls faster while a build is running.
 
 Cloudflare polling is kept cheap: each refresh asks for the latest build of up to 20 Workers per request, and a Worker's build history is only re-downloaded when its latest build changes.
+
+GitHub polling watches up to 30 workflows, starting with the most recently pushed repositories. It uses conditional requests to reuse unchanged run history without drawing down GitHub's primary rate limit, and caches repository and workflow discovery between polls.
 
 ## Requirements
 
 - macOS 13.0+
-- A Vercel API token and/or a Cloudflare user API token
+- At least one token: Vercel API, Cloudflare user API, or GitHub personal access token
 
 ## License
 
@@ -170,6 +181,10 @@ Check that:
 - It's a Worker, not a Cloudflare Pages project. Pages isn't supported yet.
 
 Preferences → Accounts shows whether the token connects and lists the Workers it can see.
+
+### My Cloudflare Workers deploy from GitHub Actions. How do I see them?
+
+Add a GitHub token under **Preferences → Accounts → GitHub** with read access to Actions on the repository. If the workflow's name or file path contains `deploy`, it appears with the default **Deploy Workflows** setting. Otherwise, choose **Specific Workflows** and select it. The menu shows the GitHub run status and opens the run when clicked.
 
 ### Do I need my Vercel Team ID?
 

@@ -2,13 +2,14 @@ import Foundation
 import Security
 
 enum TokenProvider: String, CaseIterable {
-    case vercel, cloudflare
+    case vercel, cloudflare, github
 
     var legacyKey: String { rawValue + "Token" }
     var preference: WritableKeyPath<Preferences, String> {
         switch self {
         case .vercel: \.vercelToken
         case .cloudflare: \.cloudflareToken
+        case .github: \.githubToken
         }
     }
 }
