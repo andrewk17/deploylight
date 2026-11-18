@@ -6,7 +6,7 @@
 
 Deploylight is a lightweight, open-source **macOS menu bar app** that shows your **deployment status** in real time. It works with **Vercel** deployments and **Cloudflare Workers Builds**. See build/ready/error status at a glance and jump to details with one click.
 
-*Formerly Vercel Deployment Menu Bar.*
+[Website](https://deploylight.andrewkim.me/) · *Formerly Vercel Deployment Menu Bar.*
 
 ![Deployment status in the macOS menu bar showing build/ready/error states](./vercel-menu-bar-deployment-status-macos.png)
 
@@ -182,6 +182,29 @@ The latest releases (v0.2.0+) are properly code-signed and notarized, so you sho
 1. Download the latest release from the [Releases](https://github.com/andrewk17/deploylight/releases) page
 2. If the error persists, right-click the app and select "Open" instead of double-clicking
 3. For older versions, you may need to remove the quarantine attribute: `xattr -d com.apple.quarantine "/Applications/Vercel Deployment Menu Bar.app"`
+
+## Landing page hosting
+
+The landing page in `docs/` is served by a Cloudflare assets Worker at
+[deploylight.andrewkim.me](https://deploylight.andrewkim.me/). The former
+`deploylight.akim.workers.dev` address redirects permanently to the same path
+and query on the custom domain.
+
+For local checks, source this repo's personal `.env.cloudflare.local` before
+using Wrangler and pass `--env-file .env.cloudflare.local` explicitly:
+
+```bash
+set -a && source .env.cloudflare.local && set +a
+pnpm dlx wrangler@4.162.0 deploy --dry-run --env-file .env.cloudflare.local
+pnpm dlx wrangler@4.162.0 dev --local --env-file .env.cloudflare.local
+```
+
+The old `vercel-deployment-menu-bar.vercel.app` redirect isn't configured in the
+current repo or its retained branches. The deleted historical `vercel.json`
+only configured static hosting. In the Vercel project that owns that domain,
+change the permanent redirect's destination to `https://deploylight.andrewkim.me/`,
+keeping its path and query forwarding. This is a separate dashboard change;
+this repo's Worker cannot change it.
 
 ## Contributing
 
