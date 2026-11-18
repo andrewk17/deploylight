@@ -6,20 +6,17 @@ actor GitHubActionsProvider: DeploymentProvider {
 
     private static let listTTL: TimeInterval = 10 * 60
 
-    private struct Scope: Equatable {
-        let repositories: Set<String>
-        let workflows: Set<String>
-    }
+    private struct Cached<Value> {
+        let value: Value
+        let expiresAt = Date().addingTimeInterval(GitHubActionsProvider.listTTL)
 
-    private struct Catalog {
-        let scope: Scope
-        let watches: [GitHubWatch]
-        let expiresAt: Date
+        var isFresh: Bool { expiresAt > Date() }
     }
 
     private let client: GitHubClient
     private var cacheToken: String?
-    private var catalog: Catalog?
+    private var repositoryList: Cached<[GitHubRepository]>?
+    private var workflowLists: [String: Cached<Result<[GitHubWorkflow], GitHubAPIError>>] = [:]
     private var history: [String: GitHubClient.History] = [:]
     private var rateLimitedUntil: Date?
 
@@ -37,16 +34,14 @@ actor GitHubActionsProvider: DeploymentProvider {
         guard isConfigured(preferences) else { return [] }
         if cacheToken != token {
             cacheToken = token
-            catalog = nil
+            repositoryList = nil
+            workflowLists = [:]
             history = [:]
             rateLimitedUntil = nil
         }
         if let reset = rateLimitedUntil, reset > Date() { throw GitHubAPIError.rateLimited(reset: reset) }
-        let scope = Scope(repositories: Set(preferences.githubRepositoryList.map { $0.lowercased() }),
-                          workflows: Set(preferences.githubWorkflowList.map { $0.lowercased() }))
-
         do {
-            let watches = try await resolveWatches(scope: scope, token: token)
+            let watches = try await resolveWatches(preferences: preferences, token: token)
             let workflowsByRepo = Dictionary(grouping: watches, by: { $0.repository.fullName })
             var deployments: [Deployment] = []
             var unavailable: GitHubAPIError?
@@ -73,20 +68,45 @@ actor GitHubActionsProvider: DeploymentProvider {
         }
     }
 
-    private func resolveWatches(scope: Scope, token: String) async throws -> [GitHubWatch] {
-        if let catalog, catalog.scope == scope, catalog.expiresAt > Date() { return catalog.watches }
-        let repositories = try await client.repositories(token: token).filter {
-            scope.repositories.isEmpty || scope.repositories.contains($0.fullName.lowercased())
+    private func resolveWatches(preferences: Preferences, token: String) async throws -> [GitHubWatch] {
+        let repoNames = Set(preferences.githubRepositoryList.map { $0.lowercased() })
+        let workflowIDs = Set(preferences.githubWorkflowList.map { $0.lowercased() })
+        let repositories = try await repositories(token: token).filter {
+            repoNames.isEmpty || repoNames.contains($0.fullName.lowercased())
+        }
+        let watches = try await GitHubWatch.collect(in: repositories, matching: {
+            $0.matches(workflowIDs: workflowIDs)
+        }, limit: Self.watchLimit) { repository in
+            try await self.workflows(in: repository, token: token)
         }
         try checkToken(token)
-        let watches = try await client.watches(in: repositories, token: token, matching: {
-            $0.matches(workflowIDs: scope.workflows)
-        }, limit: Self.watchLimit)
-        try checkToken(token)
-        catalog = Catalog(scope: scope, watches: watches, expiresAt: Date().addingTimeInterval(Self.listTTL))
         let ids = Set(watches.map(\.id))
         history = history.filter { ids.contains($0.key) }
         return watches
+    }
+
+    private func repositories(token: String) async throws -> [GitHubRepository] {
+        if let repositoryList, repositoryList.isFresh { return repositoryList.value }
+        let repositories = try await client.repositories(token: token)
+        try checkToken(token)
+        repositoryList = Cached(value: repositories)
+        let names = Set(repositories.map(\.fullName))
+        workflowLists = workflowLists.filter { names.contains($0.key) }
+        return repositories
+    }
+
+    private func workflows(in repository: GitHubRepository, token: String) async throws -> [GitHubWorkflow] {
+        let name = repository.fullName
+        if let cached = workflowLists[name], cached.isFresh { return try cached.value.get() }
+        let result: Result<[GitHubWorkflow], GitHubAPIError>
+        do {
+            result = .success(try await client.workflows(in: repository, token: token))
+        } catch let error as GitHubAPIError where error.repositoryUnavailable {
+            result = .failure(error)
+        }
+        try checkToken(token)
+        workflowLists[name] = Cached(value: result)
+        return try result.get()
     }
 
     private func checkToken(_ token: String) throws {

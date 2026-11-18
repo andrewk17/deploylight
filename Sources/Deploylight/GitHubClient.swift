@@ -49,6 +49,27 @@ struct GitHubWatch {
     func matches(workflowIDs: Set<String>) -> Bool {
         workflowIDs.isEmpty ? workflow.isDeployWorkflow : workflowIDs.contains(id)
     }
+
+    static func collect(
+        in repositories: [GitHubRepository], matching: (Self) -> Bool = { _ in true }, limit: Int? = nil,
+        workflows: (GitHubRepository) async throws -> [GitHubWorkflow]
+    ) async throws -> [Self] {
+        var result: [Self] = []
+        var unavailable: GitHubAPIError?
+        var listedRepository = false
+        for repository in repositories {
+            do {
+                let listed = try await workflows(repository)
+                listedRepository = true
+                result += listed.map { Self(repository: repository, workflow: $0) }.filter(matching)
+                if let limit, result.count >= limit { return Array(result.prefix(limit)) }
+            } catch let error as GitHubAPIError where error.repositoryUnavailable {
+                unavailable = error
+            }
+        }
+        if !listedRepository, let unavailable { throw unavailable }
+        return result
+    }
 }
 
 struct GitHubRun: Decodable {
@@ -130,27 +151,14 @@ struct GitHubClient {
         }
     }
 
-    func watches(
-        in repositories: [GitHubRepository], token: String,
-        matching: (GitHubWatch) -> Bool = { _ in true }, limit: Int? = nil
-    ) async throws -> [GitHubWatch] {
-        var result: [GitHubWatch] = []
-        var unavailable: GitHubAPIError?
-        var listedRepository = false
-        for repository in repositories {
-            do {
-                let workflows = try await pages("/repos/\(repository.fullName)/actions/workflows?per_page=100", token: token) {
-                    try decode(WorkflowPage.self, from: $0).workflows
-                }
-                listedRepository = true
-                result += workflows.map { GitHubWatch(repository: repository, workflow: $0) }.filter(matching)
-                if let limit, result.count >= limit { return Array(result.prefix(limit)) }
-            } catch let error as GitHubAPIError where error.repositoryUnavailable {
-                unavailable = error
-            }
+    func workflows(in repository: GitHubRepository, token: String) async throws -> [GitHubWorkflow] {
+        try await pages("/repos/\(repository.fullName)/actions/workflows?per_page=100", token: token) {
+            try decode(WorkflowPage.self, from: $0).workflows
         }
-        if !listedRepository, let unavailable { throw unavailable }
-        return result
+    }
+
+    func watches(in repositories: [GitHubRepository], token: String) async throws -> [GitHubWatch] {
+        try await GitHubWatch.collect(in: repositories) { try await workflows(in: $0, token: token) }
     }
 
     struct History {

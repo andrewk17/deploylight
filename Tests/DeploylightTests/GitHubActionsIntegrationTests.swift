@@ -82,6 +82,7 @@ final class GitHubActionsIntegrationTests: XCTestCase {
         let specific = await service.fetch(preferences: preferences)
         XCTAssertEqual(specific.deployments.map(\.projectName), ["worker"])
         XCTAssertEqual(specific.deployments.map(\.id), ["300"])
+        XCTAssertEqual(FixtureHTTP.capturedRequests().filter { !$0.url!.path.hasSuffix("/runs") }.count, 2)
 
         preferences.githubWorkflows = ""
         preferences.gitBranches = "main"
@@ -99,7 +100,7 @@ final class GitHubActionsIntegrationTests: XCTestCase {
     func testPaginatedDiscoveryCapsPollingAtNewestPushedRepositories() async throws {
         let oldRepo = repoPage(["owner/old"], pushed: "2026-01-01T09:00:00Z")
         let newRepo = repoPage(["owner/new"], pushed: "2026-09-01T09:00:00Z")
-        let workflows = (1...30).map { #"{"id":\#($0),"name":"Deploy \#($0)","path":".github/workflows/file.yml"}"# }
+        let workflows = (1...31).map { #"{"id":\#($0),"name":"Deploy \#($0)","path":".github/workflows/file.yml"}"# }
         let session = FixtureHTTP.session { request in
             switch request.url!.path {
             case "/user/repos" where request.url!.query!.contains("&page=2"):
