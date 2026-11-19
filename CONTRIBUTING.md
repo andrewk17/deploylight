@@ -1,6 +1,7 @@
 # Contributing to Deploylight
 
 Pull requests are welcome. Run `swift test` before you open one.
+Before a release, run both `swift test` and `swift test -c release -Xswiftc -enable-testing`.
 
 ## Signing and notarization
 

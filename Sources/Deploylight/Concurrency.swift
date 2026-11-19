@@ -1,3 +1,8 @@
+private struct ConcurrentAttempt<Output> {
+    let index: Int
+    let result: Result<[Output], Error>
+}
+
 /// Runs `operation` concurrently and concatenates the results.
 ///
 /// Individual failures are tolerated so one inaccessible scope doesn't hide the rest;
@@ -10,37 +15,39 @@ func gatherConcurrently<Input, Output>(
     onFailure: @Sendable (Input, Error) async throws -> Void = { _, _ in },
     _ operation: @escaping (Input) async throws -> [Output]
 ) async throws -> [Output] {
-    typealias Attempt = (Input, Result<[Output], Error>)
-    let perform: (Input) async -> Attempt = { input in
+    let perform: (Int) async -> ConcurrentAttempt<Output> = { index in
         do {
-            return (input, .success(try await operation(input)))
+            let values = try await operation(inputs[index])
+            return ConcurrentAttempt(index: index, result: .success(values))
         } catch {
-            return (input, .failure(error))
+            return ConcurrentAttempt(index: index, result: .failure(error))
         }
     }
-    return try await withThrowingTaskGroup(of: Attempt.self) { group in
-        let initial = inputs.prefix(max(1, maxConcurrent))
-        var pending = inputs.dropFirst(initial.count).makeIterator()
-        for input in initial {
-            group.addTask { await perform(input) }
+    return try await withThrowingTaskGroup(of: ConcurrentAttempt<Output>.self) { group in
+        let initialCount = min(inputs.count, max(1, maxConcurrent))
+        for index in 0..<initialCount {
+            group.addTask { await perform(index) }
         }
+        var nextIndex = initialCount
 
         var outputs: [Output] = []
         var firstError: Error?
         var succeeded = false
 
-        while let (input, result) = try await group.next() {
-            switch result {
+        while let attempt = try await group.next() {
+            switch attempt.result {
             case let .success(values):
                 succeeded = true
                 outputs.append(contentsOf: values)
             case let .failure(error):
                 if shouldPropagate(error) { throw error }
-                try await onFailure(input, error)
+                try await onFailure(inputs[attempt.index], error)
                 firstError = firstError ?? error
             }
-            if let input = pending.next() {
-                group.addTask { await perform(input) }
+            if nextIndex < inputs.count {
+                let index = nextIndex
+                nextIndex += 1
+                group.addTask { await perform(index) }
             }
         }
 
