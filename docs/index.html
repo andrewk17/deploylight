@@ -80,7 +80,7 @@
               "name": "Which deployments count as Production?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Vercel production deployments, builds of a Cloudflare Worker’s production branch, and GitHub Actions runs on the default branch started by a push, manual dispatch, schedule, release or GitHub Pages build. Everything else shows as Preview."
+                "text": "Vercel production deployments and builds of a Cloudflare Worker’s production branch show as Production. In GitHub Actions, runs on the repository’s default branch show as Production, and so do runs started by a release and GitHub Pages builds. Runs on other branches and runs for pull requests show as Preview."
               }
             },
             {
@@ -255,7 +255,7 @@
                     </article>
                     <article>
                         <h3>Which deployments count as Production?</h3>
-                        <p>Vercel production deployments, builds of a Cloudflare Worker’s production branch, and GitHub Actions runs on the default branch started by a push, manual dispatch, schedule, release or GitHub Pages build. Everything else shows as Preview.</p>
+                        <p>Vercel production deployments and builds of a Cloudflare Worker’s production branch show as Production. In GitHub Actions, runs on the repository’s default branch show as Production, and so do runs started by a release and GitHub Pages builds. Runs on other branches and runs for pull requests show as Preview.</p>
                     </article>
                     <article>
                         <h3>How often does it check?</h3>

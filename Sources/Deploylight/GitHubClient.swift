@@ -20,6 +20,14 @@ enum GitHubAPIError: LocalizedError {
         if case let .response(status, _) = self { return status == 403 || status == 404 }
         return false
     }
+
+    static func interruptsFetch(_ error: Error) -> Bool {
+        if error is CancellationError || (error as? URLError)?.code == .cancelled { return true }
+        switch error as? Self {
+        case .invalidToken, .rateLimited: return true
+        default: return false
+        }
+    }
 }
 
 struct GitHubRepository: Decodable {
@@ -55,19 +63,29 @@ struct GitHubWatch {
         workflows: (GitHubRepository) async throws -> [GitHubWorkflow]
     ) async throws -> [Self] {
         var result: [Self] = []
-        var unavailable: GitHubAPIError?
+        var firstError: Error?
         var listedRepository = false
+        var consecutiveTransientFailures = 0
         for repository in repositories {
             do {
                 let listed = try await workflows(repository)
                 listedRepository = true
+                consecutiveTransientFailures = 0
                 result += listed.map { Self(repository: repository, workflow: $0) }.filter(matching)
                 if let limit, result.count >= limit { return Array(result.prefix(limit)) }
-            } catch let error as GitHubAPIError where error.repositoryUnavailable {
-                unavailable = error
+            } catch {
+                try Task.checkCancellation()
+                if GitHubAPIError.interruptsFetch(error) { throw error }
+                firstError = firstError ?? error
+                if (error as? GitHubAPIError)?.repositoryUnavailable == true {
+                    consecutiveTransientFailures = 0
+                } else {
+                    consecutiveTransientFailures += 1
+                    if consecutiveTransientFailures == 3 { throw error }
+                }
             }
         }
-        if !listedRepository, let unavailable { throw unavailable }
+        if !listedRepository, let firstError { throw firstError }
         return result
     }
 }
@@ -77,18 +95,27 @@ struct GitHubRun: Decodable {
         let message: String
     }
 
+    struct Repository: Decodable {
+        let fullName: String
+    }
+
+    private static let pullRequestEvents: Set<String> = [
+        "pull_request", "pull_request_target", "pull_request_review", "pull_request_review_comment", "merge_group",
+    ]
+
     let id: Int64
     let status: String
     let conclusion: String?
     let event: String
     let headBranch: String?
+    let headRepository: Repository?
     let headCommit: Commit?
     let createdAt: Date
     let runStartedAt: Date?
     let updatedAt: Date
     let htmlUrl: URL
 
-    func deployment(in repository: GitHubRepository, projectName: String) -> Deployment? {
+    func deployment(for watch: GitHubWatch, projectName: String) -> Deployment? {
         let state: Deployment.State
         switch status {
         case "queued", "waiting", "requested", "pending": state = .queued
@@ -104,12 +131,15 @@ struct GitHubRun: Decodable {
         default: state = .unknown
         }
 
-        // "dynamic" is the event of GitHub's own workflows, such as "pages build and deployment".
-        let productionEvents = ["push", "workflow_dispatch", "schedule", "release", "dynamic"]
-        let target: Deployment.Target = headBranch == repository.defaultBranch && productionEvents.contains(event)
-            ? .production : .preview
+        // Release runs use the tag as head_branch, and Pages builds use the Pages source branch.
+        let isPagesBuild = event == "dynamic" && watch.workflow.path == "dynamic/pages/pages-build-deployment"
+        let isSameRepository = headRepository.map {
+            $0.fullName.caseInsensitiveCompare(watch.repository.fullName) == .orderedSame
+        } ?? true
+        let isProduction = event == "release" || isPagesBuild
+            || (headBranch == watch.repository.defaultBranch && isSameRepository && !Self.pullRequestEvents.contains(event))
         return Deployment(
-            id: String(id), provider: .github, projectName: projectName, state: state, target: target,
+            id: String(id), provider: .github, projectName: projectName, state: state, target: isProduction ? .production : .preview,
             branch: headBranch, commitMessage: headCommit?.message.components(separatedBy: .newlines).first,
             createdAt: createdAt, buildStartedAt: runStartedAt ?? createdAt,
             finishedAt: status == "completed" ? updatedAt : nil, link: htmlUrl
@@ -219,12 +249,22 @@ struct GitHubClient {
         case 401:
             throw GitHubAPIError.invalidToken
         case 403, 429:
+            let retryAfter = http.value(forHTTPHeaderField: "Retry-After")
+            let message = (try? decode(ErrorBody.self, from: data))?.message ?? "Unknown error"
+            let now = Date()
+            let seconds = retryAfter.flatMap(TimeInterval.init).flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+            let retryReset = now.addingTimeInterval(seconds ?? 60)
             if http.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0" {
                 let epoch = http.value(forHTTPHeaderField: "X-RateLimit-Reset").flatMap(TimeInterval.init)
-                let reset = epoch.map(Date.init(timeIntervalSince1970:)) ?? Date().addingTimeInterval(60)
-                throw GitHubAPIError.rateLimited(reset: reset)
+                let reset = epoch.flatMap { $0.isFinite ? Date(timeIntervalSince1970: $0) : nil }
+                    ?? now.addingTimeInterval(60)
+                throw GitHubAPIError.rateLimited(reset: retryAfter == nil ? reset : max(reset, retryReset))
             }
-            fallthrough
+            if retryAfter != nil || message.localizedCaseInsensitiveContains("secondary rate limit") {
+                throw GitHubAPIError.rateLimited(reset: retryReset)
+            }
+            if http.statusCode == 429 { throw GitHubAPIError.rateLimited(reset: now.addingTimeInterval(60)) }
+            throw GitHubAPIError.response(status: http.statusCode, message: message)
         default:
             let message = (try? decode(ErrorBody.self, from: data))?.message ?? "Unknown error"
             throw GitHubAPIError.response(status: http.statusCode, message: message)

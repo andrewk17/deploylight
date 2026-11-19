@@ -4,6 +4,7 @@ struct FixtureResponse {
     var body = ""
     var status = 200
     var headers: [String: String] = [:]
+    var error: URLError?
 }
 
 final class FixtureHTTP: URLProtocol {
@@ -37,6 +38,10 @@ final class FixtureHTTP: URLProtocol {
         Self.requests.append(request)
         let fixture = Self.handler?(request) ?? FixtureResponse(status: 500)
         Self.lock.unlock()
+        if let error = fixture.error {
+            client?.urlProtocol(self, didFailWithError: error)
+            return
+        }
         let response = HTTPURLResponse(url: request.url!, statusCode: fixture.status, httpVersion: nil, headerFields: fixture.headers)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(fixture.body.utf8))
