@@ -1,0 +1,37 @@
+<!doctype html>
+<!-- Composes the README picture: the top-right corner of a Mac screen with the menu open.
+     Text comes from the rendered pieces; this file only draws the backdrop and frames.
+     Scripts/render-site-art.sh captures it at 560x500, once with ?a=light and once with ?a=dark. -->
+<meta charset="utf-8">
+<style>
+  html { background: transparent; }
+  body { margin: 20px; }  /* render-site-art.sh crops the picture from 20 px in */
+  .tile { position: relative; width: 560px; height: 500px; overflow: hidden; border-radius: 10px; }
+  .light { background: linear-gradient(150deg, #e9ebf0 0%, #d5d9e2 55%, #c4c9d4 100%); }
+  .dark { background: linear-gradient(150deg, #3a3d46 0%, #24262c 55%, #17181c 100%); }
+  .bar { position: absolute; inset: 0 0 auto 0; height: 28px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding-right: 14px; }
+  .light .bar { background: rgba(255, 255, 255, 0.5); }
+  .dark .bar { background: rgba(0, 0, 0, 0.3); }
+  .chip { display: flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 5px; }
+  .light .chip { background: rgba(0, 0, 0, 0.12); }
+  .dark .chip { background: rgba(255, 255, 255, 0.2); }
+  .menu { position: absolute; top: 33px; right: 8px; border-radius: 10px; overflow: hidden; }
+  .light .menu { background: #f6f6f6; border: 1px solid rgba(0, 0, 0, 0.16); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22), 0 3px 10px rgba(0, 0, 0, 0.1); }
+  .dark .menu { background: #2a2a2c; border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(0, 0, 0, 0.8); }
+  img { display: block; }
+</style>
+<div class="tile" id="tile">
+  <div class="bar">
+    <span class="chip"><img id="status" width="81" height="22" alt=""></span>
+    <img id="clock" width="146" height="16" alt="">
+  </div>
+  <div class="menu"><img id="menu" width="447" height="428" alt=""></div>
+</div>
+<script>
+  const a = new URLSearchParams(location.search).get('a') === 'dark' ? 'dark' : 'light';
+  const img = '../../docs/img/';
+  document.getElementById('tile').classList.add(a);
+  document.getElementById('status').src = img + 'status-building-' + a + '.png';
+  document.getElementById('clock').src = '../../build/site-art/clock-' + a + '.png';
+  document.getElementById('menu').src = img + 'deploylight-menu-' + a + '.png';
+</script>

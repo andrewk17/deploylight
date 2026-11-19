@@ -1,3 +1,39 @@
+/* Deploylight site. The page is laid out like a Mac desktop: the header is the menu
+   bar and the menu hangs from the status item. Color comes only from the status icons. */
+
+:root {
+    color-scheme: light dark;
+    --page: #ffffff;
+    --ink: #1d1d1f;
+    --ink-soft: #6e6e73;
+    --rule: rgba(0, 0, 0, 0.1);
+    --bar: #f2f2f4;
+    --highlight: rgba(0, 0, 0, 0.1);
+    --menu: #f6f6f6;
+    --menu-edge: rgba(0, 0, 0, 0.16);
+    --menu-shadow: 0 22px 48px rgba(0, 0, 0, 0.16), 0 4px 12px rgba(0, 0, 0, 0.08);
+    --button: #1d1d1f;
+    --button-ink: #ffffff;
+    --frame: rgba(0, 0, 0, 0.14);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --page: #151516;
+        --ink: #f5f5f7;
+        --ink-soft: #a1a1a6;
+        --rule: rgba(255, 255, 255, 0.13);
+        --bar: #212123;
+        --highlight: rgba(255, 255, 255, 0.16);
+        --menu: #2a2a2c;
+        --menu-edge: rgba(255, 255, 255, 0.18);
+        --menu-shadow: 0 22px 48px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(0, 0, 0, 0.8);
+        --button: #f5f5f7;
+        --button-ink: #1d1d1f;
+        --frame: rgba(255, 255, 255, 0.16);
+    }
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -5,312 +41,398 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-    line-height: 1.6;
-    color: #333;
-    background: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 17px;
+    line-height: 1.5;
+    color: var(--ink);
+    background: var(--page);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
 }
 
-.container {
-    max-width: 1200px;
+img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+a {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--rule);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+}
+
+a:hover {
+    text-decoration-color: currentColor;
+}
+
+.wrap {
+    max-width: 1096px;
     margin: 0 auto;
-    padding: 0 20px;
+    padding: 0 28px;
 }
 
-/* Header */
-header {
-    padding: 20px 0;
-    border-bottom: 1px solid #eee;
+/* Menu bar */
+.bar {
+    background: var(--bar);
 }
 
-nav {
+.bar-row {
     display: flex;
-    justify-content: flex-end;
+    align-items: center;
+    gap: 26px;
+    height: 44px;
+    font-size: 15px;
 }
 
-.github-link {
-    color: #333;
+.bar a {
     text-decoration: none;
-    font-weight: 500;
-    padding: 8px 16px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    transition: all 0.2s;
 }
 
-.github-link:hover {
-    background: #f6f8fa;
-    border-color: #333;
-}
-
-/* Hero Section */
-.hero {
-    padding: 80px 0 60px;
-    text-align: center;
-}
-
-.hero h1 {
-    font-size: 48px;
-    font-weight: 700;
-    line-height: 1.2;
-    margin-bottom: 20px;
-    color: #000;
-}
-
-.subhead {
-    font-size: 20px;
-    color: #666;
-    margin-bottom: 40px;
-    max-width: 700px;
-    margin-left: auto;
-    margin-right: auto;
-}
-
-.cta-buttons {
+.brand {
     display: flex;
-    gap: 16px;
-    justify-content: center;
-    flex-wrap: wrap;
+    align-items: center;
+    gap: 9px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
 }
 
-.btn {
+.bar-nav {
+    display: flex;
+    gap: 22px;
+    font-weight: 500;
+}
+
+.bar-nav a:hover {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.25em;
+}
+
+.status-item {
+    display: inline-flex;
+    align-items: center;
+    height: 28px;
+    padding: 0 9px;
+    border-radius: 6px;
+    background: var(--highlight);
+}
+
+.bar-status {
+    margin-left: auto;
+}
+
+/* Hero */
+.hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 449px;
+    column-gap: 72px;
+    padding-bottom: 88px;
+}
+
+.hero-copy {
+    align-self: center;
+    padding-top: 40px;
+}
+
+h1 {
+    font-size: 50px;
+    font-weight: 700;
+    line-height: 1.06;
+    letter-spacing: -0.035em;
+    text-wrap: balance;
+}
+
+h1 span {
+    display: block;
+    color: var(--ink-soft);
+}
+
+.lede {
+    max-width: 30em;
+    margin-top: 22px;
+    font-size: 20px;
+    line-height: 1.45;
+    letter-spacing: -0.01em;
+    color: var(--ink-soft);
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px 26px;
+    margin-top: 32px;
+    font-weight: 500;
+}
+
+.button {
     display: inline-block;
-    padding: 14px 32px;
-    font-size: 16px;
+    padding: 12px 22px;
+    border-radius: 6px;
+    background: var(--button);
+    color: var(--button-ink);
     font-weight: 600;
     text-decoration: none;
-    border-radius: 8px;
-    transition: all 0.2s;
 }
 
-.btn-primary {
-    background: #000;
-    color: #fff;
+.button:hover {
+    opacity: 0.86;
 }
 
-.btn-primary:hover {
-    background: #333;
-    transform: translateY(-2px);
-}
-
-.btn-secondary {
-    background: #fff;
-    color: #000;
-    border: 1px solid #ddd;
-}
-
-.btn-secondary:hover {
-    background: #f6f8fa;
-    border-color: #333;
-    transform: translateY(-2px);
-}
-
-/* Screenshot Section */
-.screenshot-section {
-    padding: 40px 0 80px;
-    background: #f6f8fa;
-}
-
-.main-screenshot {
-    width: 100%;
-    max-width: 800px;
-    height: auto;
-    display: block;
-    margin: 0 auto;
-    border-radius: 12px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-}
-
-/* Features Section */
-.features {
-    padding: 80px 0;
-}
-
-.features h2 {
-    font-size: 36px;
-    text-align: center;
-    margin-bottom: 50px;
-}
-
-.feature-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 40px;
-}
-
-.feature h3 {
-    font-size: 20px;
-    margin-bottom: 12px;
-    color: #000;
-}
-
-.feature p {
-    color: #666;
-    line-height: 1.7;
-}
-
-/* How-to Section */
-.how-to {
-    padding: 80px 0;
-    background: #f6f8fa;
-}
-
-.how-to h2 {
-    font-size: 36px;
-    text-align: center;
-    margin-bottom: 50px;
-}
-
-.step {
-    margin-bottom: 40px;
-}
-
-.step h3 {
-    font-size: 24px;
-    margin-bottom: 12px;
-    color: #000;
-}
-
-.step p {
-    color: #666;
-    line-height: 1.7;
-    margin-bottom: 12px;
-}
-
-.step ol {
-    margin-left: 20px;
-    color: #666;
-    line-height: 1.7;
-}
-
-.step ol li {
-    margin-bottom: 8px;
-}
-
-.step code {
-    background: #fff;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-family: 'Monaco', 'Courier New', monospace;
+.note {
+    margin-top: 18px;
     font-size: 14px;
-    color: #333;
-    border: 1px solid #ddd;
+    letter-spacing: 0.005em;
+    color: var(--ink-soft);
 }
 
-.step a {
-    color: #0070f3;
-    text-decoration: none;
+/* The menu hangs just under the bar, at the size it has on a Mac. */
+.menu-figure {
+    margin-top: 6px;
 }
 
-.step a:hover {
-    text-decoration: underline;
+.figure-status {
+    display: none;
 }
 
-/* Requirements Section */
-.requirements {
-    padding: 80px 0;
+.menu {
+    border: 1px solid var(--menu-edge);
+    border-radius: 10px;
+    background: var(--menu);
+    box-shadow: var(--menu-shadow);
+    overflow: hidden;
 }
 
-.requirements h2 {
-    font-size: 36px;
-    text-align: center;
-    margin-bottom: 30px;
+/* Sections */
+.section {
+    padding-bottom: 80px;
 }
 
-.requirements ul {
-    max-width: 600px;
-    margin: 0 auto;
-    list-style: none;
+/* One rule above each section, as wide as the text. */
+.section > .wrap::before {
+    content: "";
+    display: block;
+    grid-column: 1 / -1;
+    margin-bottom: 56px;
+    border-top: 1px solid var(--rule);
 }
 
-.requirements li {
-    padding: 12px 0;
-    padding-left: 30px;
-    position: relative;
-    color: #666;
-    line-height: 1.7;
+h2 {
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.025em;
 }
 
-.requirements li:before {
-    content: "✓";
-    position: absolute;
-    left: 0;
-    color: #0070f3;
-    font-weight: bold;
+.intro {
+    max-width: 34em;
+    margin-top: 14px;
+    color: var(--ink-soft);
 }
 
-/* Open Source Section */
-.open-source {
-    padding: 80px 0;
-    background: #f6f8fa;
-    text-align: center;
+/* Status icon states */
+.states {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 28px 56px;
+    margin-top: 30px;
 }
 
-.open-source h2 {
-    font-size: 36px;
-    margin-bottom: 20px;
+.states .status-item {
+    background: var(--bar);
 }
 
-.open-source p {
-    font-size: 18px;
-    color: #666;
-    max-width: 700px;
-    margin: 0 auto;
+.states dd {
+    margin-top: 14px;
+    color: var(--ink-soft);
 }
 
-.open-source a {
-    color: #0070f3;
-    text-decoration: none;
+.states strong {
+    font-weight: 600;
+    color: var(--ink);
 }
 
-.open-source a:hover {
-    text-decoration: underline;
+/* Setup */
+.setup-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 420px;
+    column-gap: 72px;
+    align-items: start;
+}
+
+.providers {
+    margin-top: 12px;
+}
+
+.providers article {
+    padding: 22px 0;
+}
+
+.providers article + article {
+    border-top: 1px solid var(--rule);
+}
+
+h3 {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.providers p {
+    max-width: 34em;
+    margin-top: 6px;
+    color: var(--ink-soft);
+}
+
+.providers p:last-child {
+    color: var(--ink);
+    font-weight: 500;
+}
+
+.providers em {
+    font-style: normal;
+    color: var(--ink);
+}
+
+code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.9em;
+    color: var(--ink);
+}
+
+.accounts img {
+    border: 1px solid var(--frame);
+    border-radius: 10px;
+}
+
+/* Questions */
+.faq {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 36px 72px;
+    margin-top: 30px;
+}
+
+.faq p {
+    margin-top: 6px;
+    color: var(--ink-soft);
+}
+
+.closing .actions {
+    margin-top: 28px;
 }
 
 /* Footer */
 footer {
-    padding: 40px 0;
-    border-top: 1px solid #eee;
-    text-align: center;
-    color: #666;
-}
-
-footer p {
-    margin-bottom: 10px;
-}
-
-footer a {
-    color: #0070f3;
-    text-decoration: none;
-}
-
-footer a:hover {
-    text-decoration: underline;
-}
-
-.disclaimer {
+    padding: 0 0 56px;
     font-size: 14px;
-    font-style: italic;
+    color: var(--ink-soft);
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-    .hero h1 {
-        font-size: 36px;
+footer .wrap > p:first-child {
+    border-top: 1px solid var(--rule);
+    padding-top: 28px;
+}
+
+footer p + p {
+    margin-top: 8px;
+}
+
+/* Narrow screens: one column, and the status item moves down to sit on its menu. */
+@media (max-width: 960px) {
+    .wrap {
+        padding: 0 20px;
     }
 
-    .subhead {
+    .bar-row {
+        gap: 20px;
+    }
+
+    .bar-status {
+        display: none;
+    }
+
+    .bar-nav {
+        margin-left: auto;
+    }
+
+    .hero-grid {
+        grid-template-columns: minmax(0, 1fr);
+        padding-bottom: 56px;
+    }
+
+    .hero-copy {
+        padding-top: 48px;
+    }
+
+    h1 {
+        font-size: 40px;
+    }
+
+    .lede {
         font-size: 18px;
     }
 
-    .features h2,
-    .how-to h2,
-    .requirements h2,
-    .open-source h2 {
-        font-size: 28px;
+    .menu-figure {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 6px;
+        max-width: 449px;
+        margin-top: 44px;
     }
 
-    .feature-grid {
-        grid-template-columns: 1fr;
+    .figure-status {
+        display: inline-flex;
+    }
+
+    .section {
+        padding-bottom: 56px;
+    }
+
+    .section > .wrap::before {
+        margin-bottom: 40px;
+    }
+
+    h2 {
+        font-size: 26px;
+    }
+
+    .states {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .faq {
+        grid-template-columns: minmax(0, 1fr);
+        row-gap: 28px;
+    }
+
+    .setup-grid {
+        grid-template-columns: minmax(0, 1fr);
+        row-gap: 32px;
+    }
+
+    .accounts {
+        max-width: 420px;
+    }
+}
+
+@media (max-width: 480px) {
+    .actions {
+        gap: 14px 20px;
+    }
+
+    .button {
+        padding: 12px 18px;
+    }
+}
+
+@media (max-width: 370px) {
+    /* Too narrow for three links beside the name. GitHub is linked from the hero. */
+    .bar-nav a:last-child {
+        display: none;
     }
 }
