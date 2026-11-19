@@ -188,7 +188,7 @@ final class GitHubActionsIntegrationTests: XCTestCase {
             (8, "workflow_run", "topic", .preview),
             (8, "pull_request", "main", .preview),
             (8, "push", "v0.5.0", .preview),
-            (9, "dynamic", "main", .production),
+            (9, "dynamic", "main", .preview),
             (9, "dynamic", "dependabot/fix", .preview),
             (10, "dynamic", "gh-pages", .preview),
         ]

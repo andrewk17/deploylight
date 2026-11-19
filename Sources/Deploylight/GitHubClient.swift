@@ -115,8 +115,9 @@ struct GitHubRun: Decodable {
         }
 
         // Release runs use the tag as head_branch, and Pages builds use the Pages source branch.
+        // GitHub's other built-in ("dynamic") workflows, such as Dependabot updates, aren't deployments.
         let isPagesBuild = event == "dynamic" && watch.workflow.path == "dynamic/pages/pages-build-deployment"
-        let defaultBranchEvents = ["push", "workflow_dispatch", "schedule", "workflow_run", "dynamic"]
+        let defaultBranchEvents = ["push", "workflow_dispatch", "schedule", "workflow_run"]
         let isProduction = event == "release" || isPagesBuild
             || (headBranch == watch.repository.defaultBranch && defaultBranchEvents.contains(event))
         return Deployment(

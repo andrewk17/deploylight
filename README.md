@@ -57,7 +57,7 @@ Use this for anything that deploys from a workflow. That includes Workers shippe
 
 A classic token or a GitHub CLI token with the `repo` scope also works.
 
-By default, Deploylight shows runs of workflows with `deploy` in their name or file path. To watch others, switch **Workflows** to **Specific Workflows**. Release runs and built-in GitHub Pages builds show as **Production** on any branch. Runs on the default branch also show as **Production** when started by a push, a manual run, a schedule, another workflow, or a `dynamic` event. Other runs show as **Preview**.
+By default, Deploylight shows runs of workflows with `deploy` in their name or file path. To watch others, switch **Workflows** to **Specific Workflows**. Runs started by a release, and GitHub Pages builds, show as **Production**. So do runs on the default branch started by a push, a manual run, a schedule or another workflow. Other runs show as **Preview**, including pushes to a tag.
 
 ## Reading the menu
 
