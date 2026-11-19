@@ -1,0 +1,22 @@
+# Deploylight
+
+> Deploylight is a free, open-source macOS menu bar app that shows Vercel deployments, Cloudflare Workers Builds and GitHub Actions runs as they build, succeed or fail.
+
+## Facts
+
+- Price: free. License: MIT. There is no account or subscription.
+- Requires macOS 13 or later. Release builds are code-signed and notarized.
+- Download: https://github.com/andrewk17/deploylight/releases/latest
+- Vercel: shows deployments from personal accounts and teams, using a Vercel access token.
+- Cloudflare: shows Workers that build with Workers Builds. Needs a user API token with Workers Builds Configuration: Read and Workers Scripts: Read. Cloudflare Pages projects are not supported.
+- GitHub Actions: shows workflow runs, by default from workflows with "deploy" in their name or file path. Needs a fine-grained token with Actions: Read-only. This is how Workers deployed with `wrangler deploy` from a workflow appear.
+- Tokens are stored in the macOS Keychain. The app calls each provider's API directly from the Mac. There is no Deploylight server.
+- It checks every 15 seconds by default, and every 2 seconds while a build is running.
+- Formerly named Vercel Deployment Menu Bar.
+- Made by Andrew Kim (https://andrewkim.me).
+
+## Links
+
+- [Website](https://deploylight.andrewkim.me/)
+- [Source, setup guide and FAQ](https://github.com/andrewk17/deploylight)
+- [Releases](https://github.com/andrewk17/deploylight/releases)

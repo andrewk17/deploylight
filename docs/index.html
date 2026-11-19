@@ -3,128 +3,292 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Vercel and Cloudflare deploy status in your Mac menu bar. Deploylight is a free, open-source macOS app that shows Vercel deployments and Cloudflare Workers Builds as they build, succeed, or fail.">
-    <title>Vercel &amp; Cloudflare Deploy Status in Your Mac Menu Bar | Deploylight</title>
+    <meta name="color-scheme" content="light dark">
+    <meta name="description" content="Deploylight is a free, open-source macOS menu bar app that shows Vercel deployments, Cloudflare Workers Builds and GitHub Actions runs as they build, succeed or fail.">
+    <title>Vercel, Cloudflare &amp; GitHub Deploy Status in Your Mac Menu Bar | Deploylight</title>
     <link rel="canonical" href="https://deploylight.andrewkim.me/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Deploylight">
     <meta property="og:url" content="https://deploylight.andrewkim.me/">
+    <meta property="og:title" content="Deploylight: deploy status in your Mac menu bar">
+    <meta property="og:description" content="Vercel deployments, Cloudflare Workers Builds and GitHub Actions runs in one list. Free and open source.">
+    <meta property="og:image" content="https://deploylight.andrewkim.me/img/deploylight-share.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="The Deploylight menu open under its menu bar icon, listing recent deployments from Vercel, GitHub Actions and Cloudflare.">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="icon" type="image/png" href="img/deploylight-icon.png">
     <link rel="stylesheet" href="style.css">
 
-    <!-- Structured Data -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      "name": "Deploylight",
-      "alternateName": "Vercel Deployment Menu Bar",
-      "operatingSystem": "macOS 13+",
-      "applicationCategory": "DeveloperApplication",
-      "description": "Open-source macOS menu bar app that shows Vercel deployment and Cloudflare Workers Builds status in real time.",
-      "url": "https://deploylight.andrewkim.me/",
-      "downloadUrl": "https://github.com/andrewk17/deploylight/releases",
-      "screenshot": "https://deploylight.andrewkim.me/img/vercel-menu-bar-deployment-status-macos.png",
-      "license": "https://opensource.org/licenses/MIT",
-      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "name": "Deploylight",
+          "url": "https://deploylight.andrewkim.me/"
+        },
+        {
+          "@type": "SoftwareApplication",
+          "name": "Deploylight",
+          "alternateName": "Vercel Deployment Menu Bar",
+          "description": "Deploylight is a free, open-source macOS menu bar app that shows Vercel deployments, Cloudflare Workers Builds and GitHub Actions runs as they build, succeed or fail.",
+          "operatingSystem": "macOS 13 or later",
+          "applicationCategory": "DeveloperApplication",
+          "url": "https://deploylight.andrewkim.me/",
+          "downloadUrl": "https://github.com/andrewk17/deploylight/releases/latest",
+          "image": "https://deploylight.andrewkim.me/img/deploylight-icon.png",
+          "screenshot": "https://deploylight.andrewkim.me/img/deploylight-menu-bar-light.png",
+          "isAccessibleForFree": true,
+          "license": "https://opensource.org/licenses/MIT",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "author": {
+            "@type": "Person",
+            "name": "Andrew Kim",
+            "url": "https://andrewkim.me"
+          },
+          "sameAs": [
+            "https://github.com/andrewk17/deploylight"
+          ]
+        },
+        {
+          "@type": "FAQPage",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "Why don’t my Cloudflare Workers show up?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Deploylight shows Workers that build with Workers Builds, meaning the Worker is connected to a GitHub or GitLab repository in the Cloudflare dashboard. The token must be a user API token from your profile with Workers Builds Configuration: Read and Workers Scripts: Read, and it must include the Worker’s account. Cloudflare Pages projects aren’t supported yet."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "My Workers deploy from GitHub Actions. How do I see them?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Add a GitHub token with Actions: Read-only on the repository. Workflows with “deploy” in their name or file path appear by default. For any other workflow, switch Workflows to Specific Workflows in Preferences and select it."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Which deployments count as Production?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Vercel production deployments, builds of a Cloudflare Worker’s production branch, and GitHub Actions runs on the default branch started by a push, manual dispatch, schedule or release. Everything else shows as Preview."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How often does it check?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Every 15 seconds, and every 2 seconds while something is building. You can change both under Preferences → General."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Do I need my Vercel team ID?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "No. Preferences lists the teams your token can access, so you pick them from a list."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "I used Vercel Deployment Menu Bar. Do I need to set things up again?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "No. Deploylight is the same app under a new name and keeps your settings. Open it and it offers to move the old app to the Trash."
+              }
+            }
+          ]
+        }
+      ]
     }
     </script>
 </head>
 <body>
-    <header>
-        <div class="container">
-            <nav>
-                <a href="https://github.com/andrewk17/deploylight" class="github-link">View on GitHub</a>
+    <header class="bar">
+        <div class="wrap bar-row">
+            <a class="brand" href="/">
+                <img src="img/deploylight-icon.png" alt="" width="22" height="22">
+                Deploylight
+            </a>
+            <nav class="bar-nav">
+                <a href="#setup">Setup</a>
+                <a href="#faq">FAQ</a>
+                <a href="https://github.com/andrewk17/deploylight">GitHub</a>
             </nav>
+            <span class="status-item bar-status" aria-hidden="true">
+                <picture>
+                    <source srcset="img/status-building-dark.png" media="(prefers-color-scheme: dark)">
+                    <img src="img/status-building-light.png" alt="" width="81" height="22">
+                </picture>
+            </span>
         </div>
     </header>
 
     <main>
         <section class="hero">
-            <div class="container">
-                <h1>Vercel &amp; Cloudflare deploy status in your Mac menu bar</h1>
-                <p class="subhead">Deploylight is a free, open-source menu bar app for macOS. See Vercel deployments and Cloudflare Workers Builds in one list as they build, succeed, or fail.</p>
-
-                <div class="cta-buttons">
-                    <a href="https://github.com/andrewk17/deploylight/releases/latest" class="btn btn-primary">Download for macOS</a>
-                    <a href="https://github.com/andrewk17/deploylight" class="btn btn-secondary">View on GitHub</a>
+            <div class="wrap hero-grid">
+                <div class="hero-copy">
+                    <h1>Deploy status in your Mac menu bar <span>for Vercel, Cloudflare and GitHub Actions</span></h1>
+                    <p class="lede">Deploylight is a menu bar app that shows what&rsquo;s building, what&rsquo;s live and what failed, in one list, without opening a dashboard.</p>
+                    <p class="actions">
+                        <a class="button" href="https://github.com/andrewk17/deploylight/releases/latest">Download for macOS</a>
+                        <a href="https://github.com/andrewk17/deploylight">View on GitHub</a>
+                    </p>
+                    <p class="note">Free and open source. Requires macOS 13 or later.</p>
                 </div>
-            </div>
-        </section>
 
-        <section class="screenshot-section">
-            <div class="container">
-                <img src="img/vercel-menu-bar-deployment-status-macos.png"
-                     alt="Deploylight showing deployment status in the macOS menu bar with build, ready, and error states"
-                     class="main-screenshot">
-            </div>
-        </section>
-
-        <section class="features">
-            <div class="container">
-                <h2>Features</h2>
-                <div class="feature-grid">
-                    <div class="feature">
-                        <h3>Real-time Monitoring</h3>
-                        <p>Polls your providers and updates the menu bar icon as deployments build, succeed, or fail. It checks faster while a build is running.</p>
+                <figure class="menu-figure">
+                    <span class="status-item figure-status" aria-hidden="true">
+                        <picture>
+                            <source srcset="img/status-building-dark.png" media="(prefers-color-scheme: dark)">
+                            <img src="img/status-building-light.png" alt="" width="81" height="22">
+                        </picture>
+                    </span>
+                    <div class="menu">
+                        <picture>
+                            <source srcset="img/deploylight-menu-dark.png" media="(prefers-color-scheme: dark)">
+                            <img src="img/deploylight-menu-light.png" width="447" height="428"
+                                 alt="The Deploylight menu. Recent deployments from Vercel, GitHub Actions and Cloudflare, each with its branch, a Production or Preview badge, build time and start time: one building, one failed, three ready. Below, a Projects list with each project's latest production deployment.">
+                        </picture>
                     </div>
-                    <div class="feature">
-                        <h3>One List, Multiple Providers</h3>
-                        <p>Vercel deployments and Cloudflare Workers Builds appear together, newest first. Use either provider or both.</p>
+                </figure>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="wrap">
+                <h2>The icon follows your build</h2>
+                <dl class="states">
+                    <div>
+                        <dt>
+                            <span class="status-item">
+                                <picture>
+                                    <source srcset="img/status-building-dark.png" media="(prefers-color-scheme: dark)">
+                                    <img src="img/status-building-light.png" alt="Hourglass, WEB 0:42" width="81" height="22">
+                                </picture>
+                            </span>
+                        </dt>
+                        <dd><strong>Building.</strong> The project and a running build time appear while a deployment is in progress.</dd>
                     </div>
-                    <div class="feature">
-                        <h3>Filters</h3>
-                        <p>Pick teams, projects, accounts, and Workers, and filter by branch, production/preview, and deployment state.</p>
+                    <div>
+                        <dt>
+                            <span class="status-item">
+                                <picture>
+                                    <source srcset="img/status-ready-dark.png" media="(prefers-color-scheme: dark)">
+                                    <img src="img/status-ready-light.png" alt="Green check" width="15" height="22">
+                                </picture>
+                            </span>
+                        </dt>
+                        <dd><strong>Ready.</strong> Your latest deployment finished.</dd>
                     </div>
-                    <div class="feature">
-                        <h3>Lightweight &amp; Native</h3>
-                        <p>Built with Swift and SwiftUI. Code-signed and notarized, with minimal resource usage.</p>
+                    <div>
+                        <dt>
+                            <span class="status-item">
+                                <picture>
+                                    <source srcset="img/status-failed-dark.png" media="(prefers-color-scheme: dark)">
+                                    <img src="img/status-failed-light.png" alt="Red cross" width="15" height="22">
+                                </picture>
+                            </span>
+                        </dt>
+                        <dd><strong>Failed.</strong> The build broke. Click its row in the menu to open it in Vercel, Cloudflare or GitHub.</dd>
                     </div>
+                </dl>
+            </div>
+        </section>
+
+        <section class="section" id="setup">
+            <div class="wrap setup-grid">
+                <div>
+                    <h2>Connect your providers</h2>
+                    <p class="intro">Move Deploylight to your Applications folder and open it. Then paste a token for each provider you use under Preferences&nbsp;&rarr;&nbsp;Accounts. It lists what each token can see, so you choose from a list.</p>
+
+                    <div class="providers">
+                        <article>
+                            <h3>Vercel</h3>
+                            <p>Deployments from your personal account and your teams.</p>
+                            <p><a href="https://vercel.com/account/tokens" target="_blank" rel="noopener">Create a Vercel token</a></p>
+                        </article>
+                        <article>
+                            <h3>Cloudflare</h3>
+                            <p>Workers that build from a Git repository with <a href="https://developers.cloudflare.com/workers/ci-cd/builds/" target="_blank" rel="noopener">Workers Builds</a>. Use a user API token with <em>Workers Builds Configuration: Read</em> and <em>Workers Scripts: Read</em>. Pages isn&rsquo;t supported yet.</p>
+                            <p><a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener">Create a Cloudflare token</a></p>
+                        </article>
+                        <article>
+                            <h3>GitHub Actions</h3>
+                            <p>Workflow runs, by default from any workflow with &ldquo;deploy&rdquo; in its name. That covers Workers you ship with <code>wrangler deploy</code> from a workflow. Use a fine-grained token with <em>Actions: Read-only</em>.</p>
+                            <p><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Create a GitHub token</a></p>
+                        </article>
+                    </div>
+                </div>
+
+                <figure class="accounts">
+                    <picture>
+                        <source srcset="img/deploylight-accounts-dark.png" media="(prefers-color-scheme: dark)">
+                        <img src="img/deploylight-accounts-light.png" width="540" height="700" loading="lazy"
+                             alt="Deploylight Preferences, Accounts tab: Vercel, Cloudflare and GitHub each show Connected, with pickers for teams, projects, accounts, Workers, repositories and workflows.">
+                    </picture>
+                </figure>
+            </div>
+        </section>
+
+        <section class="section" id="faq">
+            <div class="wrap">
+                <h2>Questions</h2>
+                <div class="faq">
+                    <article>
+                        <h3>Why don’t my Cloudflare Workers show up?</h3>
+                        <p>Deploylight shows Workers that build with Workers Builds, meaning the Worker is connected to a GitHub or GitLab repository in the Cloudflare dashboard. The token must be a user API token from your profile with Workers Builds Configuration: Read and Workers Scripts: Read, and it must include the Worker’s account. Cloudflare Pages projects aren’t supported yet.</p>
+                    </article>
+                    <article>
+                        <h3>My Workers deploy from GitHub Actions. How do I see them?</h3>
+                        <p>Add a GitHub token with Actions: Read-only on the repository. Workflows with “deploy” in their name or file path appear by default. For any other workflow, switch Workflows to Specific Workflows in Preferences and select it.</p>
+                    </article>
+                    <article>
+                        <h3>Which deployments count as Production?</h3>
+                        <p>Vercel production deployments, builds of a Cloudflare Worker’s production branch, and GitHub Actions runs on the default branch started by a push, manual dispatch, schedule or release. Everything else shows as Preview.</p>
+                    </article>
+                    <article>
+                        <h3>How often does it check?</h3>
+                        <p>Every 15 seconds, and every 2 seconds while something is building. You can change both under Preferences → General.</p>
+                    </article>
+                    <article>
+                        <h3>Do I need my Vercel team ID?</h3>
+                        <p>No. Preferences lists the teams your token can access, so you pick them from a list.</p>
+                    </article>
+                    <article>
+                        <h3>I used Vercel Deployment Menu Bar. Do I need to set things up again?</h3>
+                        <p>No. Deploylight is the same app under a new name and keeps your settings. Open it and it offers to move the old app to the Trash.</p>
+                    </article>
                 </div>
             </div>
         </section>
 
-        <section class="how-to">
-            <div class="container">
-                <h2>How to Get Started</h2>
-
-                <div class="step">
-                    <h3>1. Download and Install</h3>
-                    <p>Download the latest release, unzip it, and move Deploylight to your Applications folder.</p>
-                </div>
-
-                <div class="step">
-                    <h3>2. Create an API Token</h3>
-                    <p><strong>Vercel:</strong> create a token in <a href="https://vercel.com/account/tokens" target="_blank" rel="noopener">Vercel Account Settings → Tokens</a>, scoped to your personal account or a team.</p>
-                    <p><strong>Cloudflare:</strong> create a user token in <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener">My Profile → API Tokens</a> with the account permissions <em>Workers Builds Configuration: Read</em> and <em>Workers Scripts: Read</em>. Deploylight shows Workers that build from a Git repository with <a href="https://developers.cloudflare.com/workers/ci-cd/builds/" target="_blank" rel="noopener">Workers Builds</a>. Cloudflare Pages isn't supported yet.</p>
-                </div>
-
-                <div class="step">
-                    <h3>3. Configure the App</h3>
-                    <p>Click the menu bar icon, select "Preferences…", and paste your token(s). Deploylight lists the teams, projects, accounts, and Workers your tokens can see, so you can pick from a list. Changes save automatically.</p>
-                </div>
-            </div>
-        </section>
-
-        <section class="requirements">
-            <div class="container">
-                <h2>Requirements</h2>
-                <ul>
-                    <li>macOS 13.0 or later</li>
-                    <li>A Vercel API token and/or a Cloudflare user API token (free to create)</li>
-                </ul>
-            </div>
-        </section>
-
-        <section class="open-source">
-            <div class="container">
-                <h2>Open Source</h2>
-                <p>Deploylight (formerly Vercel Deployment Menu Bar) is open source under the MIT License. View the source code, report issues, or contribute on <a href="https://github.com/andrewk17/deploylight">GitHub</a>.</p>
+        <section class="section">
+            <div class="wrap closing">
+                <h2>Free and open source</h2>
+                <p class="intro">Deploylight is MIT-licensed, signed and notarized. Tokens are stored in the macOS Keychain, and the app talks to Vercel, Cloudflare and GitHub straight from your Mac. Nothing goes through a Deploylight server.</p>
+                <p class="actions">
+                    <a class="button" href="https://github.com/andrewk17/deploylight/releases/latest">Download for macOS</a>
+                    <a href="https://github.com/andrewk17/deploylight">View on GitHub</a>
+                </p>
             </div>
         </section>
     </main>
 
     <footer>
-        <div class="container">
-            <p class="disclaimer">Not affiliated with or endorsed by Vercel Inc. or Cloudflare, Inc. Vercel and Cloudflare are trademarks of their respective owners.</p>
-            <p>&copy; 2025 Deploylight. Made by <a href="https://andrewkim.me" rel="author">Andrew Kim</a>. Released under the <a href="https://opensource.org/licenses/MIT">MIT License</a>.</p>
+        <div class="wrap">
+            <p>Made by <a href="https://andrewkim.me" rel="author">Andrew Kim</a>. Released under the <a href="https://opensource.org/licenses/MIT">MIT License</a>. Formerly Vercel Deployment Menu Bar.</p>
+            <p>Not affiliated with or endorsed by Vercel Inc., Cloudflare, Inc. or GitHub, Inc. Their names are trademarks of their respective owners.</p>
         </div>
     </footer>
 </body>

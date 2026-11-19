@@ -1,0 +1,38 @@
+<!doctype html>
+<!-- Composes the link preview: 1200x630 for the site, and ?w=1280&h=640 for the repository's
+     social preview on GitHub. Scripts/render-site-art.sh captures both. -->
+<meta charset="utf-8">
+<style>
+  html { background: #17181c; }
+  body { margin: 20px; }  /* render-site-art.sh crops the picture from 20 px in */
+  body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .card { position: relative; overflow: hidden; color: #f5f5f7; background: linear-gradient(150deg, #3a3d46 0%, #24262c 55%, #17181c 100%); }
+  .bar { position: absolute; inset: 0 0 auto 0; height: 44px; display: flex; align-items: center; padding: 0 22px 0 56px; background: rgba(0, 0, 0, 0.3); }
+  .brand { display: flex; align-items: center; gap: 11px; font-size: 21px; font-weight: 700; letter-spacing: -0.01em; }
+  .brand img { width: 28px; height: 28px; }
+  .right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+  .chip { display: flex; align-items: center; height: 30px; padding: 0 11px; border-radius: 7px; background: rgba(255, 255, 255, 0.2); }
+  .chip img { width: 108px; height: auto; }
+  .clock { width: 195px; height: auto; }
+  h1 { position: absolute; left: 56px; top: 50%; transform: translateY(-42%); margin: 0; width: 520px; font-size: 44px; line-height: 1.08; font-weight: 700; letter-spacing: -0.035em; text-wrap: balance; }
+  h1 span { display: block; color: #a1a1a6; }
+  .menu { position: absolute; top: 52px; right: 14px; border-radius: 13px; overflow: hidden; background: #2a2a2c; border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: 0 24px 54px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(0, 0, 0, 0.8); }
+  .menu img { display: block; width: 576px; height: auto; }
+</style>
+<div class="card" id="card">
+  <div class="bar">
+    <span class="brand"><img src="../../docs/img/deploylight-icon.png" alt="">Deploylight</span>
+    <span class="right">
+      <span class="chip"><img src="../../docs/img/status-building-dark.png" alt=""></span>
+      <img class="clock" src="../../build/site-art/clock-dark.png" alt="">
+    </span>
+  </div>
+  <h1>Deploy status in your Mac menu bar <span>for Vercel, Cloudflare and GitHub Actions</span></h1>
+  <div class="menu"><img src="../../docs/img/deploylight-menu-dark.png" alt=""></div>
+</div>
+<script>
+  const q = new URLSearchParams(location.search);
+  const card = document.getElementById('card');
+  card.style.width = (q.get('w') || 1200) + 'px';
+  card.style.height = (q.get('h') || 630) + 'px';
+</script>

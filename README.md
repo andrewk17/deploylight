@@ -1,232 +1,160 @@
-<img src="./app-icon.png" alt="Deploylight app icon" width="96">
+<img src="app-icon.png" width="72" alt="">
 
 # Deploylight
 
-**Vercel, Cloudflare, and GitHub Actions deploy status in your Mac menu bar.**
+**Deploy status in your Mac menu bar, for Vercel, Cloudflare and GitHub Actions.**
 
-Deploylight is a lightweight, open-source **macOS menu bar app** that shows your **deployment status** in real time. It works with **Vercel** deployments, **Cloudflare Workers Builds**, and **GitHub Actions** workflow runs. See build/ready/error status at a glance and jump to details with one click.
+Deploylight is a free, open-source macOS menu bar app that shows Vercel deployments, Cloudflare Workers Builds and GitHub Actions runs as they build, succeed or fail. It lists them together, newest first. Its icon follows the latest one, and clicking a row opens it in its provider.
 
-[Website](https://deploylight.andrewkim.me/) · *Formerly Vercel Deployment Menu Bar.*
+[**Download for macOS**](https://github.com/andrewk17/deploylight/releases/latest) · [Website](https://deploylight.andrewkim.me/) · [Release notes](https://github.com/andrewk17/deploylight/releases)
 
-![Deployment status in the macOS menu bar showing build/ready/error states](./vercel-menu-bar-deployment-status-macos.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/deploylight-menu-bar-dark.png">
+  <img src="docs/img/deploylight-menu-bar-light.png" width="560" alt="The Deploylight menu open under its menu bar icon. Recent deployments from Vercel, GitHub Actions and Cloudflare show their branch, a Production or Preview badge, build time and start time: one building, one failed, three ready. A Projects list follows.">
+</picture>
 
-**Features**
-- Real-time deployment status (build, ready, error)
-- Vercel deployments, Cloudflare Workers Builds, and GitHub Actions runs, merged into one list
-- Vercel personal or team tokens
-- Team, project, branch, and state filters
-- Notarized, code-signed app (no Gatekeeper warnings)
-- Native Swift app — lightweight and fast
-- Quick access to deployment details from the menu bar
+## Install
 
-## Next version: 0.4.0 (unreleased)
+1. Download the [latest release](https://github.com/andrewk17/deploylight/releases/latest), unzip it, and move Deploylight to your Applications folder.
+2. Open it, click its icon in the menu bar, and choose **Preferences…**.
+3. Under **Accounts**, paste a token for each provider you use. Changes save automatically.
 
-- API tokens move to macOS Keychain automatically; existing settings are preserved.
-- An optional daily update check adds a release link to the menu when a newer stable
-  version is available. It never downloads or installs an update automatically.
+Deploylight needs macOS 13 or later. It's code-signed and notarized, and it stores your tokens in the macOS Keychain.
 
-## Installation
+## Connect a provider
 
-### Pre-built Binary (Easiest)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/deploylight-accounts-dark.png">
+  <img align="right" src="docs/img/deploylight-accounts-light.png" width="360" alt="Preferences, Accounts tab: Vercel, Cloudflare and GitHub each show Connected, with pickers for what to show.">
+</picture>
 
-1. Download the latest release from the [Releases](https://github.com/andrewk17/deploylight/releases) page
-2. Unzip and move the app to your Applications folder
-3. Launch the app
-4. Click the menu bar icon and select "Preferences" to add a token for the providers you use
+Add one provider or all three. Deploylight only reads from them, and the Cloudflare and GitHub tokens below are read-only. After you paste a token, **Accounts** shows whether it connected and lists what it can see, so you choose teams, projects, Workers, repositories and workflows from a list.
 
-### Build from Source
+### Vercel
 
-Requirements:
-- macOS 13.0 or later
-- Xcode 15.0 or later
-- Swift 5.9 or later
+1. Open [Vercel Account Settings → Tokens](https://vercel.com/account/tokens) and create a token.
+2. For the scope, pick your personal account or the team you want to watch.
+3. Copy the token right away. Vercel shows it only once.
 
-```bash
-# Clone the repository
-git clone https://github.com/andrewk17/deploylight.git
-cd deploylight
+### Cloudflare
 
-# Build and package as an .app bundle (signed, and notarized if configured)
-./Scripts/package-app.sh
+Deploylight shows Workers that build from a GitHub or GitLab repository with [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/).
 
-# The app will be created at: build/Deploylight.app
-```
+1. Open [My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens) and choose **Create Custom Token**.
+2. Add two **Account** permissions: **Workers Builds Configuration: Read** and **Workers Scripts: Read**.
+3. Under Account Resources, include the accounts you want to watch.
 
-#### For Developers: Code Signing & Notarization
+The token must be a **user** API token, created from your profile. Account-owned tokens can't read Workers Builds. Cloudflare Pages projects aren't supported yet.
 
-The app is properly code signed and notarized to prevent macOS Gatekeeper warnings. If you're building for distribution:
+Builds of a Worker's production branch show as **Production**. Builds of other branches and pull requests show as **Preview**.
 
-1. **Prerequisites:**
-   - Apple Developer account ($99/year)
-   - Developer ID Application certificate installed
-   - App Store Connect API key for notarization
+### GitHub Actions
 
-2. **Setup App Store Connect API Key:**
-   ```bash
-   # Create directory for API key
-   mkdir -p ~/.private_keys
+Use this for anything that deploys from a workflow. That includes Workers shipped with `wrangler deploy`, which never create a Workers Build.
 
-   # Download your .p8 file from https://appstoreconnect.apple.com/access/api
-   # Move it to ~/.private_keys/
+1. Create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new).
+2. Select the repositories to watch and grant **Actions: Read-only**. GitHub adds **Metadata: Read-only** itself.
 
-   # Add to ~/.zshrc or ~/.bash_profile:
-   export APPLE_API_KEY_ID="your-key-id"
-   export APPLE_API_ISSUER="your-issuer-id"
-   export APPLE_API_KEY_PATH="$HOME/.private_keys/AuthKey_XXXXXXXXXX.p8"
-   ```
+A classic token or a GitHub CLI token with the `repo` scope also works.
 
-3. **Build and notarize:**
-   ```bash
-   ./Scripts/package-app.sh
-   # The script will automatically sign and notarize the app
-   ```
+By default, Deploylight shows runs of workflows with `deploy` in their name or file path. To watch others, switch **Workflows** to **Specific Workflows**. Runs on the default branch started by a push, manual dispatch, schedule or release show as **Production**. Other runs show as **Preview**.
 
-The build script will:
-- Sign the app with your Developer ID certificate
-- Submit to Apple's notary service
-- Staple the notarization ticket
-- Verify the signature
+## Reading the menu
 
-If notarization credentials aren't configured, the script will still sign the app but skip notarization.
+**The menu bar icon** follows a build that's running, or otherwise your latest deployment: an hourglass while it builds, a green check when it's ready, a red cross when it failed. While a build runs, the project and build time appear next to it.
 
-## Configuration
+**Recent** lists deployments from every connected provider, newest first. Each row has:
 
-### Step 1 (Optional): Generate a Vercel API Token
+- the provider: a triangle for Vercel, a cloud for Cloudflare, a branch for GitHub
+- the project and branch
+- a filled **Production** badge or an outlined **Preview** badge
+- the build time ("Building 1:12", then "Built in 2:56" or "Failed after 0:48") and when it started
 
-1. Go to [Vercel Account Settings → Tokens](https://vercel.com/account/tokens)
-2. Click "Create Token"
-3. Give your token a name (e.g., "Menu Bar App")
-4. Choose the scope:
-   - **Personal Account**: Select your personal account scope
-   - **Team Account**: Select the specific team you want to monitor
-5. Set an expiration date (optional but recommended)
-6. Click "Create Token"
-7. **Important**: Copy the token immediately - you won't be able to see it again!
+**Projects** shows each project's latest production deployment, with its recent history in a submenu.
 
-### Step 2 (Optional): Generate a Cloudflare API Token
+Click any deployment to open it in its provider.
 
-Deploylight shows Cloudflare Workers that build from a GitHub or GitLab repository with [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/). Cloudflare Pages projects aren't supported yet. To add them:
+## Preferences
 
-1. Go to [Cloudflare → My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens) and click "Create Token"
-2. Choose "Create Custom Token" and add these **Account** permissions:
-   - **Workers Builds Configuration: Read**
-   - **Workers Scripts: Read**
-3. Under Account Resources, include the account(s) you want to monitor
-4. Create the token and copy it
-
-It must be a **user** API token (created from your profile). Account-owned tokens can't read Workers Builds.
-
-Workers deployed directly with `wrangler deploy` don't create Workers Builds. If the command runs in GitHub Actions, you can show the workflow runs instead.
-
-Builds of a Worker's production branch show as **Production**. Builds of other branches and pull requests, which upload a preview version instead of deploying, show as **Preview**.
-
-### Step 3 (Optional): Generate a GitHub token
-
-1. Go to [GitHub → New fine-grained personal access token](https://github.com/settings/personal-access-tokens/new).
-2. Select the repositories you want to monitor and grant **Actions: Read-only**. GitHub adds **Metadata: Read-only** automatically.
-3. Generate the token and copy it. A classic personal access token or a GitHub CLI token with the `repo` scope also works.
-
-By default, Deploylight shows runs from workflows with `deploy` in the workflow name or file path (case-insensitive). Runs on the repository's default branch triggered by a push, manual dispatch, schedule, or release show as **Production**; other runs show as **Preview**.
-
-### Step 4: Configure the App
-
-1. Launch Deploylight from your Applications folder
-2. Click the menu bar icon and select "Preferences…"
-3. Paste the tokens for the providers you use. Changes save automatically.
-4. Optionally narrow what's shown:
-   - **Team Scopes** and **Projects** (Vercel): all, or specific ones
-   - **Accounts** and **Workers** (Cloudflare): all, or specific ones
-   - **Repositories** and **Workflows** (GitHub): all or specific repositories, deploy workflows or specific workflows
-   - **Filters**: git branches, production/preview, and deployment states
-   - **Menu Bar** (General): whether the project and build time appear next to the status icon, and the time format
-   - **Menu**: how rows mark the provider and environment, how many recent deployments to list, and whether to show the Projects section
-
-The status icon reflects an in-progress build if there is one, otherwise the latest deployment. By default, the project and build time appear next to it only while a build is running; set **Show project and build time** to **Always** or **Never** to change that.
-
-The menu lists recent deployments from all configured providers, newest first. Each row shows the provider (a triangle for Vercel, a cloud for Cloudflare, a branch for GitHub), a badge for production or preview, and the build time: "Building 1:12" while it runs, then "Built in 2:56" from the start of the build to the end. You can switch the provider and environment to plain text or hide them under **Menu** in Preferences. Below the recent list, the **Projects** section shows each project's latest production deployment, with its recent history in a submenu. Click any deployment to open it in its provider.
-
-## How It Works
-
-The app polls the Vercel deployments, Cloudflare Workers Builds, and GitHub Actions APIs, merges the results, and updates the menu bar icon based on deployment states. It polls faster while a build is running.
-
-Cloudflare polling is kept cheap: each refresh asks for the latest build of up to 20 Workers per request, and a Worker's build history is only re-downloaded when its latest build changes.
-
-GitHub polling watches up to 30 workflows, starting with the most recently pushed repositories. It uses conditional requests to reuse unchanged run history without drawing down GitHub's primary rate limit, and caches repository and workflow discovery between polls.
-
-## Requirements
-
-- macOS 13.0+
-- At least one token: Vercel API, Cloudflare user API, or GitHub personal access token
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file for details
+| Tab | What you can change |
+| --- | --- |
+| **General** | Whether the project and build time show next to the icon (while building, always or never), the time format, opening at login, the update check, and how often to refresh |
+| **Menu** | How rows mark the provider and environment, how many recent deployments to list and from how far back, and whether to show Projects |
+| **Accounts** | Your tokens, and which teams, projects, accounts, Workers, repositories and workflows to show |
+| **Filters** | Production or preview, deployment states, and git branches |
 
 ## FAQ
 
-### How do I monitor Vercel or Cloudflare deployments from the macOS menu bar?
+<details>
+<summary>How do I see Vercel, Cloudflare or GitHub Actions deploys in the macOS menu bar?</summary>
 
-Install Deploylight and add your Vercel and/or Cloudflare API token in Preferences. It displays real-time deployment status in your macOS menu bar, polling each provider's API and updating the status icon based on your latest deployments.
+Install Deploylight and paste a token for each provider under **Preferences → Accounts**. It polls each provider and updates its menu bar icon as your deployments build, succeed or fail.
+</details>
 
-### I used Vercel Deployment Menu Bar. Do I need to set things up again?
-
-No. Deploylight is the same app under a new name, and it keeps your existing settings. Move Deploylight to your Applications folder and open it, and it offers to quit the old "Vercel Deployment Menu Bar" app and move it to the Trash.
-
-### Why don't my Cloudflare Workers show up?
+<details>
+<summary>Why don't my Cloudflare Workers show up?</summary>
 
 Check that:
 
 - The Worker builds with [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/), meaning it's connected to a GitHub or GitLab repository in the Cloudflare dashboard. Workers deployed with `wrangler deploy` from your machine or another CI have no builds to show.
-- The token is a **user** API token from your profile, with **Workers Builds Configuration: Read** and **Workers Scripts: Read**, and includes the Worker's account.
+- The token is a **user** API token from your profile, with **Workers Builds Configuration: Read** and **Workers Scripts: Read**, and it includes the Worker's account.
 - It's a Worker, not a Cloudflare Pages project. Pages isn't supported yet.
 
-Preferences → Accounts shows whether the token connects and lists the Workers it can see.
+**Preferences → Accounts** shows whether the token connects and lists the Workers it can see.
+</details>
 
-### My Cloudflare Workers deploy from GitHub Actions. How do I see them?
+<details>
+<summary>My Cloudflare Workers deploy from GitHub Actions. How do I see them?</summary>
 
-Add a GitHub token under **Preferences → Accounts → GitHub** with read access to Actions on the repository. If the workflow's name or file path contains `deploy`, it appears with the default **Deploy Workflows** setting. Otherwise, choose **Specific Workflows** and select it. The menu shows the GitHub run status and opens the run when clicked.
+Add a GitHub token under **Preferences → Accounts → GitHub** with read access to Actions on the repository. If the workflow's name or file path contains `deploy`, it appears with the default **Deploy Workflows** setting. Otherwise, choose **Specific Workflows** and select it. The menu shows the run's status and opens the run when clicked.
+</details>
 
-### Do I need my Vercel Team ID?
+<details>
+<summary>Do I need my Vercel Team ID?</summary>
 
-Usually not. Preferences lists the scopes your token can access, so you can pick teams from the list instead of typing IDs.
+Usually not. Preferences lists the scopes your token can access, so you pick teams from a list instead of typing IDs.
+</details>
 
-### How do I fix the "damaged app" error on macOS?
+<details>
+<summary>I used Vercel Deployment Menu Bar. Do I need to set things up again?</summary>
 
-The latest releases (v0.2.0+) are properly code-signed and notarized, so you shouldn't see this error. If you do:
+No. Deploylight is the same app under a new name, and it keeps your settings. Move Deploylight to your Applications folder and open it. It offers to quit the old "Vercel Deployment Menu Bar" app and move it to the Trash.
+</details>
 
-1. Download the latest release from the [Releases](https://github.com/andrewk17/deploylight/releases) page
-2. If the error persists, right-click the app and select "Open" instead of double-clicking
-3. For older versions, you may need to remove the quarantine attribute: `xattr -d com.apple.quarantine "/Applications/Vercel Deployment Menu Bar.app"`
+<details>
+<summary>macOS says the app is damaged. What do I do?</summary>
 
-## Landing page hosting
+Releases since v0.2.0 are code-signed and notarized, so this shouldn't happen. If it does:
 
-The landing page in `docs/` is served by a Cloudflare assets Worker at
-[deploylight.andrewkim.me](https://deploylight.andrewkim.me/). The former
-`deploylight.akim.workers.dev` address redirects permanently to the same path
-and query on the custom domain.
+1. Download the [latest release](https://github.com/andrewk17/deploylight/releases/latest) again.
+2. If the error persists, right-click the app and choose **Open** instead of double-clicking.
+3. For versions before v0.2.0, remove the quarantine attribute: `xattr -d com.apple.quarantine "/Applications/Vercel Deployment Menu Bar.app"`
+</details>
 
-For local checks, source this repo's personal `.env.cloudflare.local` before
-using Wrangler and pass `--env-file .env.cloudflare.local` explicitly:
+## How it works
+
+Deploylight calls each provider's API straight from your Mac and merges the results. By default it checks every 15 seconds, and every 2 seconds while something is building.
+
+- **Cloudflare:** each refresh asks for the latest build of up to 20 Workers per request. A Worker's build history is downloaded again only when its latest build changes.
+- **GitHub:** it watches up to 30 workflows, starting with the most recently pushed repositories. Conditional requests reuse unchanged run history without drawing down GitHub's rate limit, and repository and workflow lists are cached between polls.
+
+An optional daily check adds a link to the menu when a newer release is out. It never downloads or installs anything.
+
+## Build from source
+
+You need macOS 13 or later, Xcode 15 or later, and Swift 5.9 or later.
 
 ```bash
-set -a && source .env.cloudflare.local && set +a
-pnpm dlx wrangler@4.162.0 deploy --dry-run --env-file .env.cloudflare.local
-pnpm dlx wrangler@4.162.0 dev --local --env-file .env.cloudflare.local
+git clone https://github.com/andrewk17/deploylight.git
+cd deploylight
+swift test
+./Scripts/package-app.sh   # creates build/Deploylight.app
 ```
 
-The old `vercel-deployment-menu-bar.vercel.app` redirect isn't configured in the
-current repo or its retained branches. The deleted historical `vercel.json`
-only configured static hosting. In the Vercel project that owns that domain,
-change the permanent redirect's destination to `https://deploylight.andrewkim.me/`,
-keeping its path and query forwarding. This is a separate dashboard change;
-this repo's Worker cannot change it.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+[CONTRIBUTING.md](CONTRIBUTING.md) covers signing, notarization, the screenshots and the website.
 
 ---
 
-Made by [Andrew Kim](https://andrewkim.me).
+Made by [Andrew Kim](https://andrewkim.me). Released under the [MIT License](LICENSE). Formerly Vercel Deployment Menu Bar.
 
-Deploylight is not affiliated with or endorsed by Vercel Inc. or Cloudflare, Inc. Vercel and Cloudflare are trademarks of their respective owners.
+Deploylight is not affiliated with or endorsed by Vercel Inc., Cloudflare, Inc. or GitHub, Inc. Their names are trademarks of their respective owners.
