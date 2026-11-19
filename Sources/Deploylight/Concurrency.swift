@@ -7,7 +7,7 @@ func gatherConcurrently<Input, Output>(
     _ inputs: [Input],
     maxConcurrent: Int = .max,
     shouldPropagate: (Error) -> Bool = { _ in false },
-    onFailure: (Input, Error) async throws -> Void = { _, _ in },
+    onFailure: @Sendable (Input, Error) async throws -> Void = { _, _ in },
     _ operation: @escaping (Input) async throws -> [Output]
 ) async throws -> [Output] {
     typealias Attempt = (Input, Result<[Output], Error>)
