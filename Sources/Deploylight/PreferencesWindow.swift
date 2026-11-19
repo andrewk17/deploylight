@@ -75,12 +75,12 @@ enum PreferencesPane: CaseIterable {
         }
     }
 
-    /// Accounts scrolls once providers list their teams and Workers; the others fit.
+    /// Accounts scrolls when provider selections grow; the others fit.
     private var height: CGFloat {
         switch self {
         case .general: 450
         case .menu: 545
-        case .accounts: 600
+        case .accounts: 740
         case .filters: 480
         }
     }
@@ -263,7 +263,7 @@ struct MenuPane: View {
             } header: {
                 Text("Rows")
             } footer: {
-                Text("The provider shows when both Vercel and Cloudflare are connected. Build times run from the start of the build to the end.")
+                Text("The provider shows when more than one is connected. Build times run from the start of the build to the end.")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -479,6 +479,50 @@ struct AccountsPane: View {
                     }
                     Text("Use a user API token with Workers Builds Configuration: Read and Workers Scripts: Read. Shows Workers that build from a Git repository with Workers Builds. Workers deployed directly with Wrangler have no builds, and Cloudflare Pages isn't supported yet.")
                         .foregroundStyle(.secondary)
+                }
+            }
+
+            Section {
+                TokenRow(
+                    token: $viewModel.githubToken,
+                    createLabel: "Create a GitHub token…",
+                    createURL: URL(string: "https://github.com/settings/personal-access-tokens/new")!
+                )
+                if viewModel.hasGitHubToken {
+                    SelectionRows(
+                        title: "Repositories",
+                        allLabel: "All Repositories",
+                        specificLabel: "Specific Repositories",
+                        mode: $viewModel.githubRepositoryMode,
+                        selection: $viewModel.selectedGitHubRepositories,
+                        options: viewModel.availableGitHubRepositories,
+                        isLoading: viewModel.githubLoading
+                    )
+                    SelectionRows(
+                        title: "Workflows",
+                        allLabel: "Deploy Workflows",
+                        specificLabel: "Specific Workflows",
+                        mode: $viewModel.githubWorkflowMode,
+                        selection: $viewModel.selectedGitHubWorkflows,
+                        options: viewModel.availableGitHubWorkflows,
+                        isLoading: viewModel.githubLoading
+                    )
+                }
+            } header: {
+                ProviderHeader(title: "GitHub", status: viewModel.githubStatus) {
+                    viewModel.refreshGitHubOptions()
+                }
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    if case let .failed(message) = viewModel.githubStatus {
+                        Text(message).foregroundStyle(.red)
+                    }
+                    Text("Use a fine-grained token with Actions: Read-only on the repositories you want. Shows GitHub Actions workflow runs, by default any workflow with \"deploy\" in its name.")
+                        .foregroundStyle(.secondary)
+                    if viewModel.githubWatchLimitReached {
+                        Text("Watching up to \(GitHubActionsProvider.watchLimit) workflows, starting with the most recently pushed repositories.")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }

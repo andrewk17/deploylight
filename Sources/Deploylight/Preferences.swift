@@ -48,6 +48,9 @@ struct Preferences: Codable, Equatable {
     var cloudflareAccountIds: String
     /// Comma-separated Worker names; empty means all.
     var cloudflareWorkers: String
+    var githubToken: String
+    var githubRepositories: String
+    var githubWorkflows: String
     var gitBranches: String
     var showProduction: Bool
     var showPreview: Bool
@@ -75,6 +78,9 @@ struct Preferences: Codable, Equatable {
         cloudflareToken: "",
         cloudflareAccountIds: "",
         cloudflareWorkers: "",
+        githubToken: "",
+        githubRepositories: "",
+        githubWorkflows: "",
         gitBranches: "",
         showProduction: true,
         showPreview: true,
@@ -101,6 +107,13 @@ struct Preferences: Codable, Equatable {
     var hasCloudflareToken: Bool {
         !cloudflareToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    var hasGitHubToken: Bool {
+        !githubToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var githubRepositoryList: [String] { commaSeparatedList(from: githubRepositories) }
+    var githubWorkflowList: [String] { commaSeparatedList(from: githubWorkflows) }
 
     var teamIdList: [String] {
         commaSeparatedList(from: teamId)
@@ -142,6 +155,7 @@ struct Preferences: Codable, Equatable {
 extension Preferences {
     enum CodingKeys: String, CodingKey {
         case vercelToken, teamId, projectName, cloudflareToken, cloudflareAccountIds, cloudflareWorkers, gitBranches, showProduction, showPreview, showReady, showBuilding, showError, showQueued, showCanceled, limitByCount, limitByHours, refreshIntervalIdle, refreshIntervalBuilding, menuBarStyle, timeFormat, showProjects, providerStyle, environmentStyle, checkForUpdates
+        case githubRepositories, githubWorkflows
     }
 
     /// Missing keys fall back to defaults so preferences saved by older versions still load.
@@ -160,6 +174,9 @@ extension Preferences {
             cloudflareToken: try value(.cloudflareToken, defaults.cloudflareToken),
             cloudflareAccountIds: try value(.cloudflareAccountIds, defaults.cloudflareAccountIds),
             cloudflareWorkers: try value(.cloudflareWorkers, defaults.cloudflareWorkers),
+            githubToken: "",
+            githubRepositories: try value(.githubRepositories, defaults.githubRepositories),
+            githubWorkflows: try value(.githubWorkflows, defaults.githubWorkflows),
             gitBranches: try value(.gitBranches, defaults.gitBranches),
             showProduction: try value(.showProduction, defaults.showProduction),
             showPreview: try value(.showPreview, defaults.showPreview),
@@ -190,6 +207,8 @@ extension Preferences {
         try container.encodeIfPresent(projectName, forKey: .projectName)
         try container.encodeIfPresent(cloudflareAccountIds, forKey: .cloudflareAccountIds)
         try container.encodeIfPresent(cloudflareWorkers, forKey: .cloudflareWorkers)
+        try container.encode(githubRepositories, forKey: .githubRepositories)
+        try container.encode(githubWorkflows, forKey: .githubWorkflows)
         try container.encodeIfPresent(gitBranches, forKey: .gitBranches)
         try container.encodeIfPresent(showProduction, forKey: .showProduction)
         try container.encodeIfPresent(showPreview, forKey: .showPreview)

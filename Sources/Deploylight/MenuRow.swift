@@ -144,6 +144,7 @@ enum MenuGlyphs {
             let (symbol, color): (String, NSColor) = switch provider {
             case .vercel: ("triangle.fill", .labelColor)
             case .cloudflare: ("cloud.fill", NSColor(srgbRed: 0.96, green: 0.51, blue: 0.13, alpha: 1))
+            case .github: ("arrow.triangle.branch", .systemPurple)
             }
             let configuration = NSImage.SymbolConfiguration(pointSize: (font.pointSize * 0.8).rounded(), weight: .medium)
                 .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
