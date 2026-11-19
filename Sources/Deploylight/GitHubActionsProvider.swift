@@ -42,24 +42,24 @@ actor GitHubActionsProvider: DeploymentProvider {
         if let reset = rateLimitedUntil, reset > Date() { throw GitHubAPIError.rateLimited(reset: reset) }
         do {
             let watches = try await resolveWatches(preferences: preferences, token: token)
+            let previous = history
+            let client = self.client
+            let refreshed = try await gatherConcurrently(watches, maxConcurrent: 6, shouldPropagate: GitHubAPIError.interruptsFetch) {
+                watch -> [(String, GitHubClient.History)] in
+                let result = try await client.runs(for: watch, token: token, previous: previous[watch.id])
+                return [(watch.id, result)]
+            }
+            try checkToken(token)
+            for (id, result) in refreshed { history[id] = result }
+
             let workflowsByRepo = Dictionary(grouping: watches, by: { $0.repository.fullName })
             var deployments: [Deployment] = []
-            var unavailable: GitHubAPIError?
-            var fetchedWorkflow = false
             for watch in watches {
-                do {
-                    let result = try await client.runs(for: watch, token: token, previous: history[watch.id])
-                    try checkToken(token)
-                    history[watch.id] = result
-                    fetchedWorkflow = true
-                    let repo = watch.repository
-                    let name = (workflowsByRepo[repo.fullName]?.count ?? 0) > 1 ? "\(repo.name) · \(watch.workflow.name)" : repo.name
-                    deployments += result.runs.compactMap { $0.deployment(in: repo, projectName: name) }
-                } catch let error as GitHubAPIError where error.repositoryUnavailable {
-                    unavailable = error
-                }
+                guard let result = history[watch.id] else { continue }
+                let repo = watch.repository
+                let name = (workflowsByRepo[repo.fullName]?.count ?? 0) > 1 ? "\(repo.name) · \(watch.workflow.name)" : repo.name
+                deployments += result.runs.compactMap { $0.deployment(for: watch, projectName: name) }
             }
-            if !fetchedWorkflow, let unavailable { throw unavailable }
             return deployments.sorted { $0.createdAt > $1.createdAt }
         } catch let GitHubAPIError.rateLimited(reset) {
             try checkToken(token)

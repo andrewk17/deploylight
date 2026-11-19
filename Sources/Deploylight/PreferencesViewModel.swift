@@ -82,8 +82,9 @@ final class PreferencesViewModel: ObservableObject {
     @Published private(set) var cloudflareLoading = false
     @Published private(set) var cloudflareOptionsErrorMessage: String?
 
-    @Published private(set) var availableGitHubRepositories: [SelectionOption] = []
-    @Published private(set) var githubLoading = false
+    @Published private(set) var githubRepositoriesLoading = false
+    @Published private(set) var githubWorkflowsLoading = false
+    @Published private var githubRepositories: [GitHubRepository]?
     @Published private var githubWatches: [GitHubWatch] = []
     @Published private var githubLogin: String?
     @Published private var githubOptionsErrorMessage: String?
@@ -103,7 +104,13 @@ final class PreferencesViewModel: ObservableObject {
     private var vercelLookupTask: Task<Void, Never>?
     private var cloudflareLookupTask: Task<Void, Never>?
     private var githubLookupTask: Task<Void, Never>?
+    private var githubLookup: GitHubLookup?
     private var isHydrating = false
+
+    private struct GitHubLookup: Equatable {
+        let token: String
+        let selectedRepositories: Set<String>
+    }
 
     init(
         store: PreferencesStore,
@@ -119,7 +126,7 @@ final class PreferencesViewModel: ObservableObject {
         setupObservers()
         refreshVercelOptions(reloadTeams: true)
         refreshCloudflareOptions()
-        refreshGitHubOptions()
+        refreshGitHubOptions(reloadRepositories: true)
     }
 
     var hasVercelToken: Bool {
@@ -136,9 +143,16 @@ final class PreferencesViewModel: ObservableObject {
 
     var githubStatus: ConnectionStatus {
         guard hasGitHubToken else { return .notConnected }
-        if githubLoading { return .checking }
+        if githubRepositoriesLoading || githubWorkflowsLoading { return .checking }
         if let message = githubOptionsErrorMessage { return .failed(message) }
         return githubLogin.map(ConnectionStatus.connected) ?? .checking
+    }
+
+    var availableGitHubRepositories: [SelectionOption] {
+        guard let githubRepositories else { return [] }
+        return Self.options(githubRepositories.map {
+            SelectionOption(id: $0.fullName.lowercased(), title: $0.fullName)
+        }, keeping: selectedGitHubRepositories)
     }
 
     var availableGitHubWorkflows: [SelectionOption] {
@@ -146,7 +160,7 @@ final class PreferencesViewModel: ObservableObject {
     }
 
     var githubWatchLimitReached: Bool {
-        guard hasGitHubToken, !githubLoading, githubOptionsErrorMessage == nil else { return false }
+        guard hasGitHubToken, !githubWorkflowsLoading, githubOptionsErrorMessage == nil else { return false }
         let ids = githubWorkflowMode == .selected ? selectedGitHubWorkflows : []
         return githubWatches.filter { $0.matches(workflowIDs: ids) }.count > GitHubActionsProvider.watchLimit
     }
@@ -187,7 +201,7 @@ final class PreferencesViewModel: ObservableObject {
         hydrate(from: store.current)
         refreshVercelOptions(reloadTeams: true)
         refreshCloudflareOptions()
-        refreshGitHubOptions()
+        refreshGitHubOptions(reloadRepositories: true)
     }
 
     func save() {
@@ -348,7 +362,7 @@ final class PreferencesViewModel: ObservableObject {
             $selectedGitHubRepositories.removeDuplicates().dropFirst().map { _ in () }
         )
         .debounce(for: .milliseconds(500), scheduler: RunLoop.main)
-        .sink { [weak self] in self?.refreshGitHubOptions() }
+        .sink { [weak self] in self?.refreshGitHubOptions(reloadRepositories: false) }
         .store(in: &cancellables)
     }
 
@@ -513,43 +527,58 @@ final class PreferencesViewModel: ObservableObject {
         cloudflareLoading = false
     }
 
-    func refreshGitHubOptions() {
+    func refreshGitHubOptions(reloadRepositories: Bool) {
         guard !isHydrating else { return }
-        githubLookupTask?.cancel()
         let token = githubToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lookup = GitHubLookup(
+            token: token,
+            selectedRepositories: githubRepositoryMode == .selected ? selectedGitHubRepositories : []
+        )
+        // Reset already started the lookup for the hydrated values.
+        guard reloadRepositories || lookup != githubLookup else { return }
+        githubLookupTask?.cancel()
+        if token != githubLookup?.token {
+            githubLogin = nil
+            githubRepositories = nil
+            githubWatches = []
+        }
+        githubLookup = lookup
         githubOptionsErrorMessage = nil
         guard !token.isEmpty else {
-            githubLogin = nil
-            availableGitHubRepositories = []
-            githubWatches = []
-            githubLoading = false
+            githubRepositoriesLoading = false
+            githubWorkflowsLoading = false
             return
         }
 
-        githubLoading = true
-        let selected = githubRepositoryMode == .selected ? selectedGitHubRepositories : []
+        let reloadRepositories = reloadRepositories || githubRepositoriesLoading || githubRepositories == nil
+        githubRepositoriesLoading = reloadRepositories
+        githubWorkflowsLoading = true
         githubLookupTask = Task { [weak self] in
-            await self?.loadGitHubOptions(token: token, selected: selected)
+            await self?.loadGitHubOptions(lookup, reloadRepositories: reloadRepositories)
         }
     }
 
-    private func loadGitHubOptions(token: String, selected: Set<String>) async {
+    private func loadGitHubOptions(_ lookup: GitHubLookup, reloadRepositories: Bool) async {
         do {
-            githubLogin = try await githubClient.login(token: token)
-            let repositories = try await githubClient.repositories(token: token)
-            try Task.checkCancellation()
-            availableGitHubRepositories = Self.options(repositories.map {
-                SelectionOption(id: $0.fullName.lowercased(), title: $0.fullName)
-            }, keeping: selectedGitHubRepositories)
-            let scope = repositories.filter { selected.isEmpty || selected.contains($0.fullName.lowercased()) }
-            let watches = try await githubClient.watches(in: scope, token: token)
+            if reloadRepositories {
+                let login = try await githubClient.login(token: lookup.token)
+                let repositories = try await githubClient.repositories(token: lookup.token)
+                try Task.checkCancellation()
+                githubLogin = login
+                githubRepositories = repositories
+                githubRepositoriesLoading = false
+            }
+            let selected = lookup.selectedRepositories
+            let scope = (githubRepositories ?? []).filter { selected.isEmpty || selected.contains($0.fullName.lowercased()) }
+            let watches = try await githubClient.watches(in: scope, token: lookup.token)
             try Task.checkCancellation()
             githubWatches = watches
         } catch {
             guard !Task.isCancelled else { return }
             if !Self.isCancellation(error) { githubOptionsErrorMessage = error.localizedDescription }
         }
-        githubLoading = false
+        githubRepositoriesLoading = false
+        githubWorkflowsLoading = false
     }
 
     /// Appends saved selections a lookup didn't return. A failed request or a change in access

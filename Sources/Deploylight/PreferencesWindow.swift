@@ -496,7 +496,7 @@ struct AccountsPane: View {
                         mode: $viewModel.githubRepositoryMode,
                         selection: $viewModel.selectedGitHubRepositories,
                         options: viewModel.availableGitHubRepositories,
-                        isLoading: viewModel.githubLoading
+                        isLoading: viewModel.githubRepositoriesLoading
                     )
                     SelectionRows(
                         title: "Workflows",
@@ -505,12 +505,12 @@ struct AccountsPane: View {
                         mode: $viewModel.githubWorkflowMode,
                         selection: $viewModel.selectedGitHubWorkflows,
                         options: viewModel.availableGitHubWorkflows,
-                        isLoading: viewModel.githubLoading
+                        isLoading: viewModel.githubWorkflowsLoading
                     )
                 }
             } header: {
                 ProviderHeader(title: "GitHub", status: viewModel.githubStatus) {
-                    viewModel.refreshGitHubOptions()
+                    viewModel.refreshGitHubOptions(reloadRepositories: true)
                 }
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {

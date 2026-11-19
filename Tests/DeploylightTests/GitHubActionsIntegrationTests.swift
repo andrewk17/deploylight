@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 @testable import Deploylight
 
@@ -121,7 +122,8 @@ final class GitHubActionsIntegrationTests: XCTestCase {
         XCTAssertTrue(snapshot.errors.isEmpty)
         let paths = FixtureHTTP.capturedRequests().compactMap { $0.url?.path }
         XCTAssertEqual(paths.filter { $0 == "/user/repos" }.count, 2)
-        XCTAssertEqual(paths.filter { $0.hasSuffix("/runs") }.count, 30)
+        XCTAssertEqual(Set(paths.filter { $0.hasSuffix("/runs") }),
+                       Set((1...30).map { "/repos/owner/new/actions/workflows/\($0)/runs" }))
         XCTAssertFalse(paths.contains { $0.contains("owner/old") })
     }
 
@@ -176,29 +178,222 @@ final class GitHubActionsIntegrationTests: XCTestCase {
         }
     }
 
-    func testGitHubPagesBuildsOnTheDefaultBranchAreProduction() async throws {
-        let workflows = #"{"workflows":[{"id":7,"name":"pages build and deployment","path":"dynamic/pages/pages-build-deployment"}]}"#
-        let runs = runPage([
-            run(id: 400, status: "completed", conclusion: "success", event: "dynamic"),
-            run(id: 401, status: "completed", conclusion: "success", event: "dynamic", branch: "topic"),
-        ])
+    func testProductionLabelsForReleasesPagesAndDefaultBranchEvents() async throws {
+        let workflows = #"{"workflows":[{"id":7,"name":"pages build and deployment","path":"dynamic/pages/pages-build-deployment"},{"id":8,"name":"Deploy","path":".github/workflows/deploy.yml"},{"id":9,"name":"Dependabot","path":"dynamic/dependabot/dependabot-updates"},{"id":10,"name":"pages build and deployment","path":".github/workflows/pages.yml"}]}"#
+        let cases: [(workflow: Int, event: String, branch: String, target: Deployment.Target)] = [
+            (7, "dynamic", "main", .production),
+            (7, "dynamic", "gh-pages", .production),
+            (8, "release", "v0.5.0", .production),
+            (8, "workflow_run", "main", .production),
+            (8, "workflow_run", "topic", .preview),
+            (8, "pull_request", "main", .preview),
+            (8, "push", "v0.5.0", .preview),
+            (9, "dynamic", "main", .production),
+            (9, "dynamic", "dependabot/fix", .preview),
+            (10, "dynamic", "gh-pages", .preview),
+        ]
+        let runs = Dictionary(grouping: cases.enumerated(), by: { $0.element.workflow }).mapValues { items in
+            runPage(items.map { index, item in
+                run(id: 400 + index, status: "completed", conclusion: "success", event: item.event, branch: item.branch)
+            })
+        }
         let session = FixtureHTTP.session { request in
             switch request.url!.path {
             case "/user/repos": return FixtureResponse(body: self.repoPage(["owner/site"]))
             case "/repos/owner/site/actions/workflows": return FixtureResponse(body: workflows)
-            case "/repos/owner/site/actions/workflows/7/runs": return FixtureResponse(body: runs)
-            default: return FixtureResponse(status: 404)
+            default:
+                guard let id = request.url?.pathComponents.dropLast().last.flatMap(Int.init),
+                      let page = runs[id] else { return FixtureResponse(status: 404) }
+                return FixtureResponse(body: page)
             }
         }
         let service = DeploymentService(providers: [GitHubActionsProvider(client: GitHubClient(session: session))])
         var preferences = Preferences.default
         preferences.githubToken = "fixture-token"
+        preferences.githubWorkflows = "owner/site#7, owner/site#8, owner/site#9, owner/site#10"
         let snapshot = await service.fetch(preferences: preferences)
         XCTAssertTrue(snapshot.errors.isEmpty)
         let byID = Dictionary(uniqueKeysWithValues: snapshot.deployments.map { ($0.id, $0) })
-        XCTAssertEqual(byID["400"]?.target, .production)
-        XCTAssertEqual(byID["401"]?.target, .preview)
-        XCTAssertEqual(byID["400"]?.projectName, "site")
+        XCTAssertEqual(byID.count, cases.count)
+        for (index, item) in cases.enumerated() {
+            XCTAssertEqual(byID[String(400 + index)]?.target, item.target, "\(item.event) on \(item.branch)")
+        }
+    }
+
+    func testPartialRunFailuresReuseHistoryAndAllFailuresSurfaceAnError() async throws {
+        let firstRuns = "/repos/owner/worker/actions/workflows/1/runs"
+        let secondRuns = "/repos/owner/worker/actions/workflows/2/runs"
+        var firstRequests = 0
+        var secondRequests = 0
+        let session = FixtureHTTP.session { request in
+            switch request.url!.path {
+            case "/user/repos": return FixtureResponse(body: self.repoPage(["owner/worker"]))
+            case "/repos/owner/worker/actions/workflows": return FixtureResponse(body: self.deployWorkflows)
+            case firstRuns:
+                firstRequests += 1
+                if firstRequests > 1 { return FixtureResponse(status: 503) }
+                return FixtureResponse(body: self.runPage([self.run(id: 500, status: "completed", conclusion: "success")]),
+                                       headers: ["ETag": #""last-good""#])
+            case secondRuns:
+                secondRequests += 1
+                if secondRequests > 2 { return FixtureResponse(error: URLError(.timedOut)) }
+                return FixtureResponse(body: self.runPage([self.run(id: 500 + secondRequests, status: "queued", conclusion: nil)]))
+            default: return FixtureResponse(status: 404)
+            }
+        }
+        let provider = GitHubActionsProvider(client: GitHubClient(session: session))
+        var preferences = Preferences.default
+        preferences.githubToken = "fixture-token"
+        let first = try await provider.fetchDeployments(preferences: preferences)
+        XCTAssertEqual(Set(first.map(\.id)), ["500", "501"])
+        let partial = try await provider.fetchDeployments(preferences: preferences)
+        XCTAssertEqual(Set(partial.map(\.id)), ["500", "502"])
+        XCTAssertEqual(partial.first { $0.id == "500" }, first.first { $0.id == "500" })
+        let retry = FixtureHTTP.capturedRequests().last { $0.url?.path == firstRuns }
+        XCTAssertEqual(retry?.value(forHTTPHeaderField: "If-None-Match"), #""last-good""#)
+        do {
+            _ = try await provider.fetchDeployments(preferences: preferences)
+            XCTFail("All run requests failed")
+        } catch let error as GitHubAPIError {
+            guard case .response(status: 503, message: _) = error else { throw error }
+        } catch let error as URLError {
+            XCTAssertEqual(error.code, .timedOut)
+        }
+    }
+
+    func testWorkflowDiscoveryRetriesTransientFailuresAndCachesUnavailableRepositories() async throws {
+        var retries: [String: Int] = [:]
+        let session = FixtureHTTP.session { request in
+            let path = request.url!.path
+            switch path {
+            case "/user/repos":
+                return FixtureResponse(body: self.repoPage(["owner/healthy", "owner/retry-server", "owner/retry-timeout", "owner/unavailable"]))
+            case "/repos/owner/healthy/actions/workflows":
+                return FixtureResponse(body: self.deployWorkflows)
+            case "/repos/owner/retry-server/actions/workflows", "/repos/owner/retry-timeout/actions/workflows":
+                retries[path, default: 0] += 1
+                if retries[path] == 1 {
+                    return path.contains("server")
+                        ? FixtureResponse(status: 503)
+                        : FixtureResponse(error: URLError(.timedOut))
+                }
+                return FixtureResponse(body: self.deployWorkflows)
+            case "/repos/owner/unavailable/actions/workflows":
+                return FixtureResponse(status: 403)
+            default:
+                if path.hasSuffix("/runs") { return FixtureResponse(body: self.runPage([])) }
+                return FixtureResponse(status: 404)
+            }
+        }
+        let provider = GitHubActionsProvider(client: GitHubClient(session: session))
+        var preferences = Preferences.default
+        preferences.githubToken = "fixture-token"
+        _ = try await provider.fetchDeployments(preferences: preferences)
+        _ = try await provider.fetchDeployments(preferences: preferences)
+        let paths = FixtureHTTP.capturedRequests().compactMap { $0.url?.path }
+        for name in ["healthy", "unavailable", "retry-server", "retry-timeout"] {
+            let lists = paths.filter { $0 == "/repos/owner/\(name)/actions/workflows" }
+            XCTAssertEqual(lists.count, name.hasPrefix("retry-") ? 2 : 1)
+        }
+        XCTAssertEqual(paths.filter { $0.hasSuffix("/runs") }.count, 8)
+    }
+
+    func testRunAuthenticationAndSecondaryRateLimitsInterruptPartialRefreshes() async throws {
+        let responses: [(FixtureResponse, TimeInterval?)] = [
+            (FixtureResponse(status: 401), nil),
+            (FixtureResponse(status: 403, headers: ["Retry-After": "120", "X-RateLimit-Remaining": "20"]), 120),
+            (FixtureResponse(body: #"{"message":"You have exceeded a secondary rate limit."}"#,
+                             status: 429, headers: ["X-RateLimit-Remaining": "20"]), 60),
+        ]
+        for (response, delay) in responses {
+            let session = FixtureHTTP.session { request in
+                switch request.url!.path {
+                case "/user/repos": return FixtureResponse(body: self.repoPage(["owner/worker"]))
+                case "/repos/owner/worker/actions/workflows": return FixtureResponse(body: self.deployWorkflows)
+                case "/repos/owner/worker/actions/workflows/1/runs": return FixtureResponse(body: self.runPage([]))
+                case "/repos/owner/worker/actions/workflows/2/runs": return response
+                default: return FixtureResponse(status: 404)
+                }
+            }
+            let service = DeploymentService(providers: [GitHubActionsProvider(client: GitHubClient(session: session))])
+            var preferences = Preferences.default
+            preferences.githubToken = "fixture-token"
+            let before = Date()
+            let snapshot = await service.fetch(preferences: preferences)
+            let error = try XCTUnwrap(snapshot.errors[.github] as? GitHubAPIError)
+            switch (error, delay) {
+            case (.invalidToken, nil): break
+            case let (.rateLimited(reset), .some(seconds)):
+                XCTAssertGreaterThanOrEqual(reset, before.addingTimeInterval(seconds))
+                XCTAssertLessThanOrEqual(reset, Date().addingTimeInterval(seconds))
+                let requests = FixtureHTTP.capturedRequests().count
+                let blocked = await service.fetch(preferences: preferences)
+                guard case let .rateLimited(blockedUntil) = blocked.errors[.github] as? GitHubAPIError else {
+                    XCTFail("Expected the next refresh to be rate limited")
+                    continue
+                }
+                XCTAssertEqual(blockedUntil, reset)
+                XCTAssertEqual(FixtureHTTP.capturedRequests().count, requests)
+            default: XCTFail("Unexpected error for HTTP \(response.status): \(error)")
+            }
+        }
+    }
+
+    @MainActor
+    func testRepositorySelectionReloadsOnlyWorkflowsAndResetLooksUpOnce() async throws {
+        let suite = "DeploylightGitHubOptions.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = PreferencesStore(userDefaults: defaults, tokens: FixtureTokenStore())
+        try store.update { $0.githubToken = "fixture-token" }
+        let session = FixtureHTTP.session { request in
+            switch request.url!.path {
+            case "/user": return FixtureResponse(body: #"{"login":"owner"}"#)
+            case "/user/repos": return FixtureResponse(body: self.repoPage(["owner/worker", "owner/site"]))
+            case "/repos/owner/worker/actions/workflows", "/repos/owner/site/actions/workflows":
+                return FixtureResponse(body: self.deployWorkflows)
+            default: return FixtureResponse(status: 404)
+            }
+        }
+        let viewModel = PreferencesViewModel(store: store, githubClient: GitHubClient(session: session))
+        let initial = expectation(description: "Initial GitHub options loaded")
+        let initialObservation = viewModel.$githubWorkflowsLoading.first { !$0 }.sink { _ in initial.fulfill() }
+        await fulfillment(of: [initial], timeout: 5)
+        withExtendedLifetime(initialObservation) {}
+        let repositories = viewModel.availableGitHubRepositories
+        XCTAssertEqual(repositories.map(\.id), ["owner/site", "owner/worker"])
+
+        let reloaded = expectation(description: "Selecting a repository reloaded its workflows")
+        let reloadObservation = viewModel.$githubWorkflowsLoading.dropFirst(2).first { !$0 }.sink { _ in reloaded.fulfill() }
+        let repositoryReload = viewModel.$githubRepositoriesLoading.dropFirst().sink { XCTAssertFalse($0) }
+        viewModel.githubRepositoryMode = .selected
+        viewModel.selectedGitHubRepositories = ["owner/worker"]
+        await fulfillment(of: [reloaded], timeout: 5)
+        repositoryReload.cancel()
+        withExtendedLifetime(reloadObservation) {}
+        XCTAssertEqual(viewModel.availableGitHubRepositories, repositories)
+        XCTAssertEqual(viewModel.availableGitHubWorkflows.count, 3)
+        let selectionPaths = FixtureHTTP.capturedRequests().compactMap { $0.url?.path }
+        XCTAssertEqual(selectionPaths, [
+            "/user", "/user/repos", "/repos/owner/site/actions/workflows", "/repos/owner/worker/actions/workflows",
+            "/repos/owner/worker/actions/workflows",
+        ])
+
+        viewModel.selectedGitHubRepositories = ["owner/site"]
+        viewModel.reset()
+        XCTAssertEqual(viewModel.selectedGitHubRepositories, ["owner/worker"])
+        let reset = expectation(description: "Reset reloaded GitHub options")
+        let resetObservation = viewModel.$githubWorkflowsLoading.first { !$0 }.sink { _ in reset.fulfill() }
+        await fulfillment(of: [reset], timeout: 5)
+        withExtendedLifetime(resetObservation) {}
+
+        let duplicate = expectation(description: "Reset values did not restart the debounced lookup")
+        duplicate.isInverted = true
+        let duplicateObservation = viewModel.$githubWorkflowsLoading.first { $0 }.sink { _ in duplicate.fulfill() }
+        await fulfillment(of: [duplicate], timeout: 1)
+        withExtendedLifetime(duplicateObservation) {}
+        let resetPaths = FixtureHTTP.capturedRequests().compactMap { $0.url?.path }.dropFirst(selectionPaths.count)
+        XCTAssertEqual(Array(resetPaths), ["/user", "/user/repos", "/repos/owner/worker/actions/workflows"])
     }
 
     private func repoPage(_ names: [String], pushed: String = "2026-09-01T09:00:00Z") -> String {
