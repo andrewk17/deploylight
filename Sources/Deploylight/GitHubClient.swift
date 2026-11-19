@@ -104,7 +104,8 @@ struct GitHubRun: Decodable {
         default: state = .unknown
         }
 
-        let productionEvents = ["push", "workflow_dispatch", "schedule", "release"]
+        // "dynamic" is the event of GitHub's own workflows, such as "pages build and deployment".
+        let productionEvents = ["push", "workflow_dispatch", "schedule", "release", "dynamic"]
         let target: Deployment.Target = headBranch == repository.defaultBranch && productionEvents.contains(event)
             ? .production : .preview
         return Deployment(
