@@ -429,3 +429,10 @@ footer p + p {
         padding: 12px 18px;
     }
 }
+
+@media (max-width: 370px) {
+    /* Too narrow for three links beside the name. GitHub is linked from the hero. */
+    .bar-nav a:last-child {
+        display: none;
+    }
+}
