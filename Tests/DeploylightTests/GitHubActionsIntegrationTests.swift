@@ -176,6 +176,31 @@ final class GitHubActionsIntegrationTests: XCTestCase {
         }
     }
 
+    func testGitHubPagesBuildsOnTheDefaultBranchAreProduction() async throws {
+        let workflows = #"{"workflows":[{"id":7,"name":"pages build and deployment","path":"dynamic/pages/pages-build-deployment"}]}"#
+        let runs = runPage([
+            run(id: 400, status: "completed", conclusion: "success", event: "dynamic"),
+            run(id: 401, status: "completed", conclusion: "success", event: "dynamic", branch: "topic"),
+        ])
+        let session = FixtureHTTP.session { request in
+            switch request.url!.path {
+            case "/user/repos": return FixtureResponse(body: self.repoPage(["owner/site"]))
+            case "/repos/owner/site/actions/workflows": return FixtureResponse(body: workflows)
+            case "/repos/owner/site/actions/workflows/7/runs": return FixtureResponse(body: runs)
+            default: return FixtureResponse(status: 404)
+            }
+        }
+        let service = DeploymentService(providers: [GitHubActionsProvider(client: GitHubClient(session: session))])
+        var preferences = Preferences.default
+        preferences.githubToken = "fixture-token"
+        let snapshot = await service.fetch(preferences: preferences)
+        XCTAssertTrue(snapshot.errors.isEmpty)
+        let byID = Dictionary(uniqueKeysWithValues: snapshot.deployments.map { ($0.id, $0) })
+        XCTAssertEqual(byID["400"]?.target, .production)
+        XCTAssertEqual(byID["401"]?.target, .preview)
+        XCTAssertEqual(byID["400"]?.projectName, "site")
+    }
+
     private func repoPage(_ names: [String], pushed: String = "2026-09-01T09:00:00Z") -> String {
         let records = names.map { #"{"name":"\#($0.split(separator: "/").last!)","full_name":"\#($0)","default_branch":"main","pushed_at":"\#(pushed)"}"# }
         return "[\(records.joined(separator: ","))]"
