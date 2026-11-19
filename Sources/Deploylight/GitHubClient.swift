@@ -22,7 +22,7 @@ enum GitHubAPIError: LocalizedError {
     }
 
     static func interruptsFetch(_ error: Error) -> Bool {
-        if error is CancellationError { return true }
+        if error is CancellationError || (error as? URLError)?.code == .cancelled { return true }
         switch error as? Self {
         case .invalidToken, .rateLimited: return true
         default: return false
@@ -65,16 +65,24 @@ struct GitHubWatch {
         var result: [Self] = []
         var firstError: Error?
         var listedRepository = false
+        var consecutiveTransientFailures = 0
         for repository in repositories {
             do {
                 let listed = try await workflows(repository)
                 listedRepository = true
+                consecutiveTransientFailures = 0
                 result += listed.map { Self(repository: repository, workflow: $0) }.filter(matching)
                 if let limit, result.count >= limit { return Array(result.prefix(limit)) }
             } catch {
                 try Task.checkCancellation()
                 if GitHubAPIError.interruptsFetch(error) { throw error }
                 firstError = firstError ?? error
+                if (error as? GitHubAPIError)?.repositoryUnavailable == true {
+                    consecutiveTransientFailures = 0
+                } else {
+                    consecutiveTransientFailures += 1
+                    if consecutiveTransientFailures == 3 { throw error }
+                }
             }
         }
         if !listedRepository, let firstError { throw firstError }
@@ -87,11 +95,20 @@ struct GitHubRun: Decodable {
         let message: String
     }
 
+    struct Repository: Decodable {
+        let fullName: String
+    }
+
+    private static let pullRequestEvents: Set<String> = [
+        "pull_request", "pull_request_target", "pull_request_review", "pull_request_review_comment", "merge_group",
+    ]
+
     let id: Int64
     let status: String
     let conclusion: String?
     let event: String
     let headBranch: String?
+    let headRepository: Repository?
     let headCommit: Commit?
     let createdAt: Date
     let runStartedAt: Date?
@@ -115,11 +132,12 @@ struct GitHubRun: Decodable {
         }
 
         // Release runs use the tag as head_branch, and Pages builds use the Pages source branch.
-        // GitHub's other built-in ("dynamic") workflows, such as Dependabot updates, aren't deployments.
         let isPagesBuild = event == "dynamic" && watch.workflow.path == "dynamic/pages/pages-build-deployment"
-        let defaultBranchEvents = ["push", "workflow_dispatch", "schedule", "workflow_run"]
+        let isSameRepository = headRepository.map {
+            $0.fullName.caseInsensitiveCompare(watch.repository.fullName) == .orderedSame
+        } ?? true
         let isProduction = event == "release" || isPagesBuild
-            || (headBranch == watch.repository.defaultBranch && defaultBranchEvents.contains(event))
+            || (headBranch == watch.repository.defaultBranch && isSameRepository && !Self.pullRequestEvents.contains(event))
         return Deployment(
             id: String(id), provider: .github, projectName: projectName, state: state, target: isProduction ? .production : .preview,
             branch: headBranch, commitMessage: headCommit?.message.components(separatedBy: .newlines).first,
@@ -234,14 +252,16 @@ struct GitHubClient {
             let retryAfter = http.value(forHTTPHeaderField: "Retry-After")
             let message = (try? decode(ErrorBody.self, from: data))?.message ?? "Unknown error"
             let now = Date()
-            if retryAfter != nil || message.localizedCaseInsensitiveContains("secondary rate limit") {
-                let seconds = retryAfter.flatMap(TimeInterval.init).flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
-                throw GitHubAPIError.rateLimited(reset: now.addingTimeInterval(seconds ?? 60))
-            }
+            let seconds = retryAfter.flatMap(TimeInterval.init).flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+            let retryReset = now.addingTimeInterval(seconds ?? 60)
             if http.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0" {
                 let epoch = http.value(forHTTPHeaderField: "X-RateLimit-Reset").flatMap(TimeInterval.init)
-                let reset = epoch.map(Date.init(timeIntervalSince1970:)) ?? now.addingTimeInterval(60)
-                throw GitHubAPIError.rateLimited(reset: reset)
+                let reset = epoch.flatMap { $0.isFinite ? Date(timeIntervalSince1970: $0) : nil }
+                    ?? now.addingTimeInterval(60)
+                throw GitHubAPIError.rateLimited(reset: retryAfter == nil ? reset : max(reset, retryReset))
+            }
+            if retryAfter != nil || message.localizedCaseInsensitiveContains("secondary rate limit") {
+                throw GitHubAPIError.rateLimited(reset: retryReset)
             }
             if http.statusCode == 429 { throw GitHubAPIError.rateLimited(reset: now.addingTimeInterval(60)) }
             throw GitHubAPIError.response(status: http.statusCode, message: message)

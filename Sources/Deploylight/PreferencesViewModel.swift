@@ -105,6 +105,7 @@ final class PreferencesViewModel: ObservableObject {
     private var cloudflareLookupTask: Task<Void, Never>?
     private var githubLookupTask: Task<Void, Never>?
     private var githubLookup: GitHubLookup?
+    private var githubOptionsToken: String?
     private var isHydrating = false
 
     private struct GitHubLookup: Equatable {
@@ -537,7 +538,8 @@ final class PreferencesViewModel: ObservableObject {
         // Reset already started the lookup for the hydrated values.
         guard reloadRepositories || lookup != githubLookup else { return }
         githubLookupTask?.cancel()
-        if token != githubLookup?.token {
+        if token != githubOptionsToken {
+            githubOptionsToken = token
             githubLogin = nil
             githubRepositories = nil
             githubWatches = []
@@ -575,7 +577,10 @@ final class PreferencesViewModel: ObservableObject {
             githubWatches = watches
         } catch {
             guard !Task.isCancelled else { return }
-            if !Self.isCancellation(error) { githubOptionsErrorMessage = error.localizedDescription }
+            if !Self.isCancellation(error) {
+                githubLookup = nil
+                githubOptionsErrorMessage = error.localizedDescription
+            }
         }
         githubRepositoriesLoading = false
         githubWorkflowsLoading = false

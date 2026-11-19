@@ -98,7 +98,6 @@ final class OffscreenRenderTests: XCTestCase {
         let deployment = try XCTUnwrap(rows.first)
         NSApplication.shared.setActivationPolicy(.prohibited)
         let menu = menuRows(rows, now: deployment.createdAt.addingTimeInterval(120))
-        print("GitHub release row badge: \(try XCTUnwrap(deployment.target).rawValue)")
         try capture(menu, appearance: .aqua, at: directory.appendingPathComponent("github-release-row.png"))
     }
 #endif

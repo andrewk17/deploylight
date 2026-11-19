@@ -5,23 +5,30 @@ actor GitHubActionsProvider: DeploymentProvider {
     static let watchLimit = 30
 
     private static let listTTL: TimeInterval = 10 * 60
+    private static let workflowRetryTTL: TimeInterval = 60
+    private static let runHistoryTTL: TimeInterval = 5 * 60
 
     private struct Cached<Value> {
         let value: Value
-        let expiresAt = Date().addingTimeInterval(GitHubActionsProvider.listTTL)
+        let expiresAt: Date
+    }
 
-        var isFresh: Bool { expiresAt > Date() }
+    private struct RunHistory {
+        let value: GitHubClient.History
+        let fetchedAt: Date
     }
 
     private let client: GitHubClient
+    private let now: @Sendable () -> Date
     private var cacheToken: String?
     private var repositoryList: Cached<[GitHubRepository]>?
-    private var workflowLists: [String: Cached<Result<[GitHubWorkflow], GitHubAPIError>>] = [:]
-    private var history: [String: GitHubClient.History] = [:]
+    private var workflowLists: [String: Cached<Result<[GitHubWorkflow], Error>>] = [:]
+    private var history: [String: RunHistory] = [:]
     private var rateLimitedUntil: Date?
 
-    init(client: GitHubClient = GitHubClient()) {
+    init(client: GitHubClient = GitHubClient(), now: @escaping @Sendable () -> Date = { Date() }) {
         self.client = client
+        self.now = now
     }
 
     nonisolated func isConfigured(_ preferences: Preferences) -> Bool {
@@ -39,32 +46,48 @@ actor GitHubActionsProvider: DeploymentProvider {
             history = [:]
             rateLimitedUntil = nil
         }
-        if let reset = rateLimitedUntil, reset > Date() { throw GitHubAPIError.rateLimited(reset: reset) }
+        if let reset = rateLimitedUntil, reset > now() { throw GitHubAPIError.rateLimited(reset: reset) }
         do {
             let watches = try await resolveWatches(preferences: preferences, token: token)
             let previous = history
             let client = self.client
-            let refreshed = try await gatherConcurrently(watches, maxConcurrent: 6, shouldPropagate: GitHubAPIError.interruptsFetch) {
-                watch -> [(String, GitHubClient.History)] in
-                let result = try await client.runs(for: watch, token: token, previous: previous[watch.id])
-                return [(watch.id, result)]
+            let now = self.now
+            let refreshed = try await gatherConcurrently(
+                watches, maxConcurrent: 4, shouldPropagate: GitHubAPIError.interruptsFetch,
+                onFailure: { watch, error in
+                    try await self.discardHistoryIfNeeded(for: watch, error: error, token: token)
+                }
+            ) { watch -> [(String, RunHistory)] in
+                let result = try await client.runs(for: watch, token: token, previous: previous[watch.id]?.value)
+                return [(watch.id, RunHistory(value: result, fetchedAt: now()))]
             }
             try checkToken(token)
             for (id, result) in refreshed { history[id] = result }
 
+            let cutoff = now().addingTimeInterval(-Self.runHistoryTTL)
+            history = history.filter { $0.value.fetchedAt > cutoff }
             let workflowsByRepo = Dictionary(grouping: watches, by: { $0.repository.fullName })
             var deployments: [Deployment] = []
             for watch in watches {
                 guard let result = history[watch.id] else { continue }
                 let repo = watch.repository
                 let name = (workflowsByRepo[repo.fullName]?.count ?? 0) > 1 ? "\(repo.name) · \(watch.workflow.name)" : repo.name
-                deployments += result.runs.compactMap { $0.deployment(for: watch, projectName: name) }
+                deployments += result.value.runs.compactMap { $0.deployment(for: watch, projectName: name) }
             }
             return deployments.sorted { $0.createdAt > $1.createdAt }
         } catch let GitHubAPIError.rateLimited(reset) {
             try checkToken(token)
             rateLimitedUntil = reset
             throw GitHubAPIError.rateLimited(reset: reset)
+        }
+    }
+
+    private func discardHistoryIfNeeded(for watch: GitHubWatch, error: Error, token: String) throws {
+        try checkToken(token)
+        guard let result = history[watch.id] else { return }
+        if (error as? GitHubAPIError)?.repositoryUnavailable == true
+            || now().timeIntervalSince(result.fetchedAt) >= Self.runHistoryTTL {
+            history[watch.id] = nil
         }
     }
 
@@ -86,10 +109,10 @@ actor GitHubActionsProvider: DeploymentProvider {
     }
 
     private func repositories(token: String) async throws -> [GitHubRepository] {
-        if let repositoryList, repositoryList.isFresh { return repositoryList.value }
+        if let repositoryList, repositoryList.expiresAt > now() { return repositoryList.value }
         let repositories = try await client.repositories(token: token)
         try checkToken(token)
-        repositoryList = Cached(value: repositories)
+        repositoryList = Cached(value: repositories, expiresAt: now().addingTimeInterval(Self.listTTL))
         let names = Set(repositories.map(\.fullName))
         workflowLists = workflowLists.filter { names.contains($0.key) }
         return repositories
@@ -97,15 +120,29 @@ actor GitHubActionsProvider: DeploymentProvider {
 
     private func workflows(in repository: GitHubRepository, token: String) async throws -> [GitHubWorkflow] {
         let name = repository.fullName
-        if let cached = workflowLists[name], cached.isFresh { return try cached.value.get() }
-        let result: Result<[GitHubWorkflow], GitHubAPIError>
+        if let cached = workflowLists[name], cached.expiresAt > now() { return try cached.value.get() }
+        let result: Result<[GitHubWorkflow], Error>
+        let ttl: TimeInterval
         do {
             result = .success(try await client.workflows(in: repository, token: token))
-        } catch let error as GitHubAPIError where error.repositoryUnavailable {
-            result = .failure(error)
+            ttl = Self.listTTL
+        } catch {
+            try checkToken(token)
+            if GitHubAPIError.interruptsFetch(error) { throw error }
+            if (error as? GitHubAPIError)?.repositoryUnavailable == true {
+                result = .failure(error)
+                ttl = Self.listTTL
+            } else {
+                if let cached = workflowLists[name], case .success = cached.value {
+                    result = cached.value
+                } else {
+                    result = .failure(error)
+                }
+                ttl = Self.workflowRetryTTL
+            }
         }
         try checkToken(token)
-        workflowLists[name] = Cached(value: result)
+        workflowLists[name] = Cached(value: result, expiresAt: now().addingTimeInterval(ttl))
         return try result.get()
     }
 
