@@ -263,7 +263,7 @@ struct MenuPane: View {
             } header: {
                 Text("Rows")
             } footer: {
-                Text("The provider shows when both Vercel and Cloudflare are connected. Build times run from the start of the build to the end.")
+                Text("The provider shows when more than one is connected. Build times run from the start of the build to the end.")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
